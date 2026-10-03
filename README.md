@@ -1,13 +1,22 @@
 # Spherical Plane World
 
-Native macOS Metal version. It targets the current display's maximum refresh
-rate and does not use Safari.
+The primary version is a modular WebGL2 browser game. The native macOS Metal
+reference build remains available in `Sources/SphericalWorld`.
 
-Run from Terminal:
+Double-click `run.command`, or run a local web server from Terminal:
 
 ```sh
-swift run SphericalWorld
+python3 -m http.server 8000
 ```
 
-Click the window to capture the mouse. Use WASD or arrow keys to walk, Shift to
-run, R to reset, and Escape to release the mouse.
+Then open `http://127.0.0.1:8000/`. To run the native reference build instead,
+double-click `run-native.command`.
+
+The aiming guide sweeps automatically. Press Space once to lock its direction;
+the power meter then oscillates. Press Space again to lock power and shoot.
+Press R to restart the hole and Escape to release the mouse.
+
+Shots launch into the air. Gravity continuously points toward the nearest part
+of the spherical ground. Ground and platform impacts bounce until their
+vertical energy is low enough to settle into rolling, while box-side impacts
+ricochet with stronger restitution.

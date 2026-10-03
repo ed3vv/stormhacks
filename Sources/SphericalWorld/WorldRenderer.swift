@@ -10,12 +10,15 @@ private struct Uniforms {
     var forward = SIMD4<Float>(0, 0, 0, 0)
     var right = SIMD4<Float>(0, 0, 0, 0)
     var up = SIMD4<Float>(0, 0, 0, 0)
+    var golfBall = SIMD4<Float>(0, 0, 0, 0)
+    var hole = SIMD4<Float>(0, 0, 0, 0)
+    var aim = SIMD4<Float>(0, 0, 0, 0)
+    var game = SIMD4<Float>(0, 0, 0, 0)
 }
 
 final class WorldRenderer: NSObject, MTKViewDelegate {
     let model: WorldModel
-    var inputProvider: (() -> (forward: Float, strafe: Float, running: Bool))?
-    var statsHandler: ((Int, Float) -> Void)?
+    var statsHandler: ((Int) -> Void)?
     private let commandQueue: MTLCommandQueue
     private let pipeline: MTLRenderPipelineState
     private var lastTime = CACurrentMediaTime()
@@ -46,9 +49,7 @@ final class WorldRenderer: NSObject, MTKViewDelegate {
         let now = CACurrentMediaTime()
         let deltaTime = Float(min(now - lastTime, 0.05))
         lastTime = now
-        let input = inputProvider?() ?? (forward: 0, strafe: 0, running: false)
-        model.update(forwardAmount: input.forward, strafeAmount: input.strafe,
-                     deltaTime: deltaTime, running: input.running)
+        model.update(deltaTime: deltaTime)
         guard let pass = view.currentRenderPassDescriptor,
               let drawable = view.currentDrawable,
               let buffer = commandQueue.makeCommandBuffer(),
@@ -56,7 +57,7 @@ final class WorldRenderer: NSObject, MTKViewDelegate {
 
         // Visual eye height in the fourth-dimensional direction. Raising this
         // opens the floor-to-far-side volume without changing the world radius.
-        let height: Float = 0.16
+        let height: Float = 0.16 + model.cameraSupportAltitude
         let p = model.position
         let f = model.forward
         let r = model.right
@@ -71,7 +72,16 @@ final class WorldRenderer: NSObject, MTKViewDelegate {
             player: player,
             forward: viewForward,
             right: SIMD4<Float>(r.x, r.y, r.z, 0),
-            up: viewUp
+            up: viewUp,
+            golfBall: model.ballRenderCenter,
+            hole: SIMD4<Float>(model.holePosition.x, model.holePosition.y,
+                               model.holePosition.z, model.holeRadius),
+            aim: SIMD4<Float>(model.aimDirection.x, model.aimDirection.y,
+                              model.aimDirection.z, model.shotPower),
+            game: SIMD4<Float>(model.isBallMoving ? 1 : 0,
+                               model.isComplete ? 1 : 0,
+                               model.ballRadius,
+                               model.isAirborne ? 1 : 0)
         )
         encoder.setRenderPipelineState(pipeline)
         encoder.setFragmentBytes(&uniforms, length: MemoryLayout<Uniforms>.stride, index: 0)
@@ -81,8 +91,8 @@ final class WorldRenderer: NSObject, MTKViewDelegate {
         buffer.commit()
 
         frameCount += 1
-        if now - statsStart >= 0.5 {
-            statsHandler?(Int((Double(frameCount) / (now - statsStart)).rounded()), model.distanceFromStart)
+        if now - statsStart >= 0.25 {
+            statsHandler?(Int((Double(frameCount) / (now - statsStart)).rounded()))
             statsStart = now
             frameCount = 0
         }

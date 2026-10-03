@@ -11,9 +11,14 @@ final class WorldView: MTKView {
     override func keyDown(with event: NSEvent) {
         if event.keyCode == 53 { releaseMouse() }
         else if event.keyCode == 15 { model?.reset() }
+        else if event.keyCode == 49 {
+            if !event.isARepeat { model?.pressAction() }
+        }
         else { pressedKeys.insert(event.keyCode) }
     }
-    override func keyUp(with event: NSEvent) { pressedKeys.remove(event.keyCode) }
+    override func keyUp(with event: NSEvent) {
+        pressedKeys.remove(event.keyCode)
+    }
     override func flagsChanged(with event: NSEvent) {
         shiftPressed = event.modifierFlags.contains(.shift)
     }
@@ -64,32 +69,32 @@ final class AppDelegate: NSObject, NSApplicationDelegate {
         window.makeFirstResponder(view)
 
         let fpsLabel = makeLabel(size: 14, weight: .semibold)
+        let golfLabel = makeLabel(size: 14, weight: .semibold)
         let helpLabel = makeLabel(size: 13, weight: .regular)
-        helpLabel.stringValue = "Walk on a spherical plane.\nClick to look · WASD walk · Shift run · R reset · Esc release mouse"
+        helpLabel.stringValue = "Space locks direction · Space again locks power and shoots · R resets"
         helpLabel.maximumNumberOfLines = 2
         view.addSubview(fpsLabel)
+        view.addSubview(golfLabel)
         view.addSubview(helpLabel)
         NSLayoutConstraint.activate([
             fpsLabel.leadingAnchor.constraint(equalTo: view.leadingAnchor, constant: 14),
             fpsLabel.topAnchor.constraint(equalTo: view.topAnchor, constant: 14),
+            golfLabel.leadingAnchor.constraint(equalTo: view.leadingAnchor, constant: 14),
+            golfLabel.topAnchor.constraint(equalTo: fpsLabel.bottomAnchor, constant: 8),
             helpLabel.leadingAnchor.constraint(equalTo: view.leadingAnchor, constant: 14),
-            helpLabel.topAnchor.constraint(equalTo: fpsLabel.bottomAnchor, constant: 10)
+            helpLabel.topAnchor.constraint(equalTo: golfLabel.bottomAnchor, constant: 8)
         ])
 
         let model = WorldModel()
         view.model = model
         do { renderer = try WorldRenderer(view: view, model: model) }
         catch { presentErrorAndQuit(error.localizedDescription); return }
-        renderer.inputProvider = { [weak view] in
-            guard let keys = view?.pressedKeys else { return (0, 0, false) }
-            let forward: Float = (keys.contains(13) || keys.contains(126) ? 1 : 0)
-                - (keys.contains(1) || keys.contains(125) ? 1 : 0)
-            let strafe: Float = (keys.contains(2) || keys.contains(124) ? 1 : 0)
-                - (keys.contains(0) || keys.contains(123) ? 1 : 0)
-            return (forward, strafe, view?.shiftPressed ?? false)
-        }
-        renderer.statsHandler = { fps, distance in
-            fpsLabel.stringValue = "FPS: \(fps)    From start: \(String(format: "%.2f", distance))"
+        renderer.statsHandler = { fps in
+            fpsLabel.stringValue = "FPS: \(fps)"
+            let filled = Int((model.shotPower * 12).rounded())
+            let meter = String(repeating: "█", count: filled)
+                + String(repeating: "░", count: 12 - filled)
+            golfLabel.stringValue = "STROKES: \(model.strokes)   POWER [\(meter)]   \(model.statusText)"
         }
         view.delegate = renderer
         NSApp.activate(ignoringOtherApps: true)

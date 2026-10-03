@@ -1,0 +1,10 @@
+:root { color-scheme: dark; }
+* { box-sizing: border-box; }
+html, body { margin: 0; width: 100%; height: 100%; overflow: hidden; background: #000; }
+body { font-family: ui-monospace, SFMono-Regular, Menlo, monospace; color: #eef1ff; }
+#world { position: fixed; inset: 0; width: 100%; height: 100%; display: block; }
+#hud { position: fixed; left: 14px; top: 14px; display: grid; gap: 8px; pointer-events: none; }
+#hud > div { width: max-content; max-width: min(760px, calc(100vw - 28px)); padding: 7px 10px; border-radius: 7px; background: rgb(10 13 29 / 74%); text-shadow: 0 1px 2px #000; }
+#fps, #game { font-weight: 700; }
+.help { font: 13px/1.35 system-ui, sans-serif; }
+#error { position: fixed; inset: 20px; padding: 20px; background: #300; color: #fff; white-space: pre-wrap; }
