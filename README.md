@@ -12,8 +12,9 @@ python3 -m http.server 8000
 Then open `http://127.0.0.1:8000/`. To run the native reference build instead,
 double-click `run-native.command`.
 
-The aiming guide sweeps automatically. Press Space once to lock its direction;
-the power meter then oscillates. Press Space again to lock power and shoot.
+Move the cursor horizontally to steer the center of the automatic aiming sweep.
+Press Space once to lock its direction; the power meter then oscillates. Press
+Space again to lock power and shoot.
 Press R to restart the hole and Escape to release the mouse.
 
 Shots launch into the air. Gravity continuously points toward the nearest part

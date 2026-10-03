@@ -36,7 +36,13 @@ export class WorldModel {
     this.airVelocity=mul(add(mul(horizontal,Math.cos(angle)),mul(up,Math.sin(angle))),speed);
     this.groundVelocity=[0,0,0];this.lockedCamera=[...this.aimDirection];this.airborne=true;this.support=null;this.supportAltitude=0;this.strokes++;
   }
-  look(dx,dy){ this.pitch=clamp(this.pitch-dy*.0025,-.85,.42); this.updateCamera(); }
+  look(dx,dy){
+    if(!this.moving&&!this.complete&&!this.aimLocked){
+      this.baseAim=this.rotated(this.baseAim,dx*.0025);
+      this.aimDirection=this.rotated(this.baseAim,Math.sin(this.aimPhase*1.7)*.72);
+    }
+    this.pitch=clamp(this.pitch-dy*.0025,-.85,.42);this.updateCamera();
+  }
   update(dt){
     const was=this.moving;
     if(!this.moving&&!this.complete){
