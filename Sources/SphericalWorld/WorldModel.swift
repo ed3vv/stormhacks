@@ -7,8 +7,6 @@ final class WorldModel {
     private(set) var right = SIMD3<Float>(0, 0, 1)
     private(set) var pitch: Float = 0
     private(set) var distanceFromStart: Float = 0
-    let ballDirection = simd_normalize(SIMD3<Float>(0.8, 0.6, 0))
-    let ballRadius: Float = 0.12
     private var correctionCounter = 0
 
     func reset() {
@@ -38,7 +36,6 @@ final class WorldModel {
 
     private func walk(tangent: SIMD3<Float>, amount: Float, isForward: Bool) {
         let nextPosition = position * cos(amount) + tangent * sin(amount)
-        if simd_dot(nextPosition, ballDirection) > cos(ballRadius + 0.025) { return }
         let nextTangent = -position * sin(amount) + tangent * cos(amount)
         position = nextPosition
         if isForward { forward = nextTangent } else { right = nextTangent }

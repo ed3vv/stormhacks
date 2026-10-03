@@ -8,32 +8,34 @@ struct Uniforms {
     float4 forward;
     float4 right;
     float4 up;
-    float4 ball;
 };
 
 struct RasterData { float4 position [[position]]; };
 
-float grassHash(float3 p) {
-    p = fract(p * 0.1031);
-    p += dot(p, p.yzx + 33.33);
-    return fract((p.x + p.y) * p.z);
-}
+struct BoxSpec {
+    float3 anchor;
+    float3 axisX;
+    float3 axisY;
+    float3 halfSize;
+    float3 color;
+    float4 sphereCenter;
+    float sphereCosRadius;
+};
 
-float grassNoise(float3 p) {
-    float3 cell = floor(p);
-    float3 f = fract(p);
-    f = f * f * (3.0 - 2.0 * f);
-    float n000 = grassHash(cell);
-    float n100 = grassHash(cell + float3(1, 0, 0));
-    float n010 = grassHash(cell + float3(0, 1, 0));
-    float n110 = grassHash(cell + float3(1, 1, 0));
-    float n001 = grassHash(cell + float3(0, 0, 1));
-    float n101 = grassHash(cell + float3(1, 0, 1));
-    float n011 = grassHash(cell + float3(0, 1, 1));
-    float n111 = grassHash(cell + float3(1, 1, 1));
-    return mix(mix(mix(n000, n100, f.x), mix(n010, n110, f.x), f.y),
-               mix(mix(n001, n101, f.x), mix(n011, n111, f.x), f.y), f.z);
-}
+constant BoxSpec boxes[12] = {
+    { float3(-0.1582667,-0.5514225,-0.8190756), float3(0.9611929,-0.2758772,0), float3(-0.2259643,-0.7872897,0.5736855), float3(0.05729,0.0441781,0.0591369), float3(0.749337,0.0678391,0.6326528), float4(-0.1579907,-0.5504608,-0.8176472,0.0590338), 0.9883227 },
+    { float3(-0.4729068,-0.5030331,-0.7234064), float3(0.7285874,-0.6849528,0), float3(-0.4954992,-0.5270648,0.6904225), float3(0.0279613,0.0362004,0.1319101), float3(0.2567048,0.2758504,0.8992962), float4(-0.4688454,-0.498713,-0.7171936,0.1307773), 0.9744772 },
+    { float3(0.9806302,-0.1956148,-0.0099635), float3(0.1956245,0.9806789,0), float3(0.009771,-0.0019491,0.9999504), float3(0.0258073,0.0334518,0.0521049), float3(0.0643311,0.6275307,0.7329694), float4(0.9793017,-0.1953498,-0.00995,0.0520343), 0.9939301 },
+    { float3(-0.9222494,-0.2086856,-0.3254327), float3(0.2206993,-0.9753419,0), float3(-0.3174081,-0.0718228,0.9455652), float3(0.0912092,0.0392725,0.0722301), float3(0.7376245,0.0652113,0.6465656), float4(-0.919853,-0.2081433,-0.3245871,0.0720424), 0.9800853 },
+    { float3(-0.338032,-0.5352655,-0.7740964), float3(0.8455106,-0.5339586,0), float3(-0.4133354,-0.6545067,0.6330678), float3(0.0511273,0.0691915,0.0632492), float3(0.3689378,0.1785569,0.8884523), float4(-0.3373579,-0.5341981,-0.7725526,0.0631231), 0.9848314 },
+    { float3(-0.3316531,0.9352964,0.1233968), float3(-0.9424996,-0.3342073,0), float3(0.0412401,-0.1163014,0.9923574), float3(0.0332443,0.0283977,0.0885131), float3(0.8200965,0.5321173,0.1001972), float4(-0.3303615,0.931654,0.1229162,0.0881684), 0.9869913 },
+    { float3(0.7786598,-0.625421,-0.0503737), float3(0.626216,0.7796496,0), float3(0.0392738,-0.0315448,0.9987304), float3(0.0835847,0.0368342,0.0447193), float3(0.5992175,0.7754769,0.0696562), float4(0.7778824,-0.6247966,-0.0503234,0.0446747), 0.9862112 },
+    { float3(-0.0077993,-0.9517934,-0.3066407), float3(0.9999664,-0.008194,0), float3(-0.0025126,-0.3066304,0.9518253), float3(0.03638,0.0305436,0.0934684), float3(0.7719863,0.6038921,0.074777), float4(-0.0077654,-0.9476628,-0.30531,0.0930627), 0.9853638 },
+    { float3(0.5966121,0.5668338,0.568114), float3(-0.6887829,0.7249677,0), float3(-0.4118643,-0.3913072,0.8229499), float3(0.0573414,0.069398,0.2121751), float3(0.3918472,0.1626172,0.8823186), float4(0.5836199,0.5544901,0.5557424,0.2075546), 0.9346914 },
+    { float3(0.8240269,-0.5635792,-0.0579502), float3(0.5645279,0.825414,0), float3(0.0478329,-0.0327145,0.9983195), float3(0.0447087,0.0623424,0.1461799), float3(0.301719,0.8991329,0.2326422), float4(0.8153614,-0.5576526,-0.0573408,0.1446427), 0.9648452 },
+    { float3(0.2587637,-0.9428267,0.2100455), float3(0.9643396,0.2646681,0), float3(-0.0555923,0.2025552,0.9776916), float3(0.044286,0.0401495,0.0874475), float3(0.3175326,0.2188723,0.8976663), float4(0.25778,-0.9392423,0.2092469,0.0871151), 0.9850676 },
+    { float3(0.7525857,0.577199,-0.316948), float3(-0.6085753,0.7934961,0), float3(0.251497,0.1928868,0.9484429), float3(0.0386598,0.0344847,0.1369906), float3(0.5959637,0.777876,0.0703921), float4(0.7456219,0.571858,-0.3140153,0.135723), 0.9720206 }
+};
 
 vertex RasterData fullscreenVertex(uint vertexID [[vertex_id]]) {
     const float2 vertices[3] = {
@@ -45,93 +47,116 @@ vertex RasterData fullscreenVertex(uint vertexID [[vertex_id]]) {
 }
 
 fragment float4 worldFragment(RasterData in [[stage_in]],
-                              constant Uniforms &u [[buffer(0)]],
-                              texture2d<float> lettering [[texture(0)]],
-                              texture2d<float> grassTexture [[texture(1)]]) {
+                              constant Uniforms &u [[buffer(0)]]) {
     float2 uv = (in.position.xy * 2.0 - u.resolution) / u.resolution.y;
     uv.y = -uv.y;
-    float4 direction = normalize(u.forward + uv.x * u.right + uv.y * u.up);
-
-    float best = 6.2831853;
-    bool hitBall = false;
-    float radius = sqrt(max(1.0 - u.ball.w * u.ball.w, 0.0));
-    float a = dot(u.player, u.ball);
-    float b = dot(direction, u.ball);
-    float radial = sqrt(a * a + b * b);
-    if (radius <= radial) {
-        float phi = atan2(b, a);
-        float delta = acos(clamp(radius / radial, -1.0, 1.0));
-        for (int k = 0; k < 2; ++k) {
-            float t = fmod(phi + (k == 0 ? -delta : delta) + 6.2831853, 6.2831853);
-            if (t > 0.001 && t < best) { best = t; hitBall = true; }
-        }
-    }
+    uv *= 0.64;
+    float curvedVertical = uv.y - 0.105 * uv.x * uv.x;
+    float4 direction = normalize(u.forward + uv.x * u.right
+                                           + curvedVertical * u.up);
 
     float groundDistance = fmod(atan2(-u.player.w, direction.w) + 3.14159265,
                                 3.14159265);
-    bool hitGround = false;
-    if (groundDistance > 0.001 && groundDistance < best) {
-        best = groundDistance;
-        hitGround = true;
-        hitBall = false;
+    float best = groundDistance;
+    int hitBox = -1;
+    float3 hitLocal = 0.0;
+    float3 hitHalfSize = 1.0;
+    float3 hitColor = 1.0;
+
+    // Analytical geodesic ray/cuboid intersections. A bounding sphere rejects
+    // nearly every box before the six exact face tests are needed.
+    for (int i = 0; i < 12; ++i) {
+        constant BoxSpec &box = boxes[i];
+        float3 anchor = box.anchor;
+        float3 axisX = box.axisX;
+        float3 axisY = box.axisY;
+        float3 halfSize = box.halfSize;
+        float3 objectColor = box.color;
+        float height = halfSize.z * 2.0;
+
+        float sphereA = dot(u.player, box.sphereCenter);
+        float sphereB = dot(direction, box.sphereCenter);
+        float sphereRange = sqrt(sphereA * sphereA + sphereB * sphereB);
+        if (box.sphereCosRadius > sphereRange) { continue; }
+
+        float spherePhase = atan2(sphereB, sphereA);
+        float sphereDelta = acos(clamp(box.sphereCosRadius / sphereRange,
+                                       -1.0, 1.0));
+        float sphereNear = fmod(spherePhase - sphereDelta + 6.2831853,
+                                6.2831853);
+        float sphereFar = fmod(spherePhase + sphereDelta + 6.2831853,
+                               6.2831853);
+        if (sphereNear >= best && sphereFar >= best) { continue; }
+
+        float denominatorStart = dot(u.player.xyz, anchor);
+        float denominatorDirection = dot(direction.xyz, anchor);
+        float3 numeratorStart = float3(dot(u.player.xyz, axisX),
+                                       dot(u.player.xyz, axisY), u.player.w);
+        float3 numeratorDirection = float3(dot(direction.xyz, axisX),
+                                           dot(direction.xyz, axisY), direction.w);
+        float3 boxCenter = float3(0.0, 0.0, height * 0.5);
+
+        for (int faceIndex = 0; faceIndex < 6; ++faceIndex) {
+            int dimension = faceIndex / 2;
+            float side = (faceIndex & 1) == 0 ? -1.0 : 1.0;
+            float boundary = boxCenter[dimension]
+                           + side * halfSize[dimension];
+            float coefficientA = numeratorStart[dimension]
+                               - boundary * denominatorStart;
+            float coefficientB = numeratorDirection[dimension]
+                               - boundary * denominatorDirection;
+            float candidate = fmod(atan2(-coefficientA, coefficientB)
+                                   + 3.14159265, 3.14159265);
+            if (candidate <= 0.001 || candidate >= best) { continue; }
+
+            float cosine = cos(candidate);
+            float sine = sin(candidate);
+            float denominator = denominatorStart * cosine
+                              + denominatorDirection * sine;
+            if (denominator <= 0.02) { continue; }
+            float3 local = (numeratorStart * cosine
+                          + numeratorDirection * sine) / denominator;
+            float3 centered = local - boxCenter;
+            float3 excess = abs(centered) - halfSize;
+            if (excess.x <= 0.0005 && excess.y <= 0.0005
+                && excess.z <= 0.0005) {
+                best = candidate;
+                hitBox = i;
+                hitLocal = centered;
+                hitHalfSize = halfSize;
+                hitColor = objectColor;
+            }
+        }
     }
 
-    const float3 sky = float3(0.3, 0.5, 0.82);
-    float3 color = sky;
-    float4 point = u.player * cos(best) + direction * sin(best);
-    float4 light = normalize(u.player - point * dot(point, u.player));
-    if (hitGround) {
-        float4 normal = normalize(float4(0.0, 0.0, 0.0, 1.0) - point * point.w);
-        float diffuse = abs(dot(normal, light));
-        float3 surfacePoint = point.xyz;
-        float broadVariation = grassNoise(surfacePoint * 7.0);
-        constexpr sampler grassSampler(coord::normalized,
-                                       address::repeat,
-                                       filter::linear);
-        float textureScale = 4.5;
-        float3 blendWeights = pow(abs(surfacePoint), 5.0);
-        blendWeights /= max(blendWeights.x + blendWeights.y + blendWeights.z,
-                            0.0001);
-        float3 grassXY = grassTexture.sample(grassSampler,
-                                             surfacePoint.xy * textureScale).rgb;
-        float3 grassYZ = grassTexture.sample(grassSampler,
-                                             surfacePoint.yz * textureScale).rgb;
-        float3 grassZX = grassTexture.sample(grassSampler,
-                                             surfacePoint.zx * textureScale).rgb;
-        float3 base = grassYZ * blendWeights.x
-                    + grassZX * blendWeights.y
-                    + grassXY * blendWeights.z;
-        base *= 0.82 + broadVariation * 0.34;
-        float3 litGrass = base * (0.30 + 0.90 * diffuse);
-        color = mix(sky, litGrass, exp(-0.13 * best));
-    } else if (hitBall) {
-        float4 normal = normalize(point * dot(point, u.ball) - u.ball);
-        float diffuse = abs(dot(normal, light));
-        float3 base = 0.55 + 0.45 * cos(6.2831 * float3(0.0, 0.33, 0.67));
-        float checker = sign(sin(14.0 * point.x) * sin(14.0 * point.y) * sin(14.0 * point.z));
-        base *= checker > 0.0 ? 1.0 : 0.6;
-        float3 lit = base * (0.25 + 0.9 * diffuse) + 0.2 * pow(diffuse, 24.0);
-        color = mix(sky, lit, exp(-0.13 * best));
-
-        // Map the lettering around the geodesic ball's upper surface.
-        float4 localDirection = normalize((point - u.ball * radius) / u.ball.w);
-        float3 centerDirection = normalize(u.ball.xyz);
-        float4 topAxis = float4(-centerDirection * u.ball.w, radius);
-        float4 horizontalAxis = float4(0.0, 0.0, 1.0, 0.0);
-        float4 verticalAxis = normalize(float4(-centerDirection.y,
-                                                centerDirection.x, 0.0, 0.0));
-        float2 labelPosition = float2(dot(localDirection, horizontalAxis),
-                                     dot(localDirection, verticalAxis));
-        float2 labelUV = float2(0.5 + labelPosition.x / 1.45,
-                                0.5 - labelPosition.y / 0.52);
-        bool onTop = dot(localDirection, topAxis) > 0.68;
-        bool insideLabel = all(labelUV >= 0.0) && all(labelUV <= 1.0);
-        constexpr sampler textSampler(coord::normalized,
-                                      address::clamp_to_zero,
-                                      filter::linear);
-        float4 ink = lettering.sample(textSampler, labelUV);
-        float labelAmount = (onTop && insideLabel) ? ink.a : 0.0;
-        color = mix(color, float3(1.0, 0.93, 0.35), labelAmount);
+    if (hitBox >= 0) {
+        float3 face = abs(hitLocal) / max(hitHalfSize, float3(0.0001));
+        float faceLight;
+        if (face.z > face.x && face.z > face.y) {
+            faceLight = 1.12;
+        } else if (face.x > face.y) {
+            faceLight = 0.72;
+        } else {
+            faceLight = 0.88;
+        }
+        return float4(hitColor * faceLight, 1.0);
     }
-    return float4(color, 1.0);
+
+    float4 groundPoint = u.player * cos(groundDistance)
+                       + direction * sin(groundDistance);
+    float4 groundNormal = normalize(float4(0.0, 0.0, 0.0, 1.0)
+                                  - groundPoint * groundPoint.w);
+    float4 light = normalize(u.player
+                           - groundPoint * dot(groundPoint, u.player));
+    float diffuse = abs(dot(groundNormal, light));
+    float longitude = atan2(groundPoint.y, groundPoint.x);
+    float latitude = asin(clamp(groundPoint.z, -1.0, 1.0));
+    float checker = fmod(floor(longitude * 1.9099)
+                       + floor(latitude * 3.8197), 2.0);
+    float3 base = mix(float3(0.13, 0.36, 0.20),
+                      float3(0.55, 0.62, 0.35), checker);
+    const float3 sky = float3(0.30, 0.50, 0.82);
+    float3 groundColor = mix(sky, base * (0.35 + 0.75 * diffuse),
+                             exp(-0.13 * groundDistance));
+    return float4(groundColor, 1.0);
 }
