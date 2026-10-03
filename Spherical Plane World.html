@@ -1,0 +1,131 @@
+<!DOCTYPE html>
+<html lang="en"><head><meta charset="utf-8">
+<meta name="viewport" content="width=device-width, initial-scale=1, viewport-fit=cover">
+<title>Spherical Plane World</title>
+<style>
+html,body{margin:0;height:100%;background:#000;overflow:hidden;font-family:system-ui,sans-serif;color:#e8ecff}
+canvas{position:fixed;left:0;top:0;width:100vw;height:100vh;height:100dvh;display:block;touch-action:none}
+#hud{position:fixed;left:12px;top:calc(env(safe-area-inset-top,0px) + 12px);background:rgba(10,12,30,.65);padding:10px 12px;border-radius:10px;font-size:13px;line-height:1.5;max-width:280px;pointer-events:none}
+#hud b{color:#9fb4ff}
+#btns{position:fixed;right:14px;bottom:calc(env(safe-area-inset-bottom,0px) + 14px);display:flex;flex-direction:column;gap:10px}
+#btns button{width:56px;height:56px;border-radius:50%;border:0;background:rgba(120,140,255,.4);color:#fff;font-size:22px}
+</style></head><body>
+<canvas id="c"></canvas>
+<div id="hud"><b>Walk on a spherical plane.</b><br>Click to look · <b>WASD</b> walk · <b>Shift</b> run · <b>R</b> reset<br><b>Look up</b> to see the far side of the world, upside-down. Walk 2π ≈ 6.28 and you're home.<br>From start: <span id="d">0.00</span></div>
+<div id="btns"><button id="bf">▲</button><button id="bb">▼</button></div>
+<script>
+const cv=document.getElementById('c'),hud=document.getElementById('hud');
+const gl=cv.getContext('webgl')||cv.getContext('experimental-webgl');
+if(!gl)hud.textContent='WebGL is not available in this browser.';
+const N=48;
+const vs=`attribute vec2 a;void main(){gl_Position=vec4(a,0.,1.);}`;
+const fs=`#ifdef GL_FRAGMENT_PRECISION_HIGH
+precision highp float;
+#else
+precision mediump float;
+#endif
+uniform vec2 res;uniform vec4 P,F,R,U;uniform vec4 C[${N}];
+void main(){
+ vec2 uv=(gl_FragCoord.xy*2.-res)/res.y;
+ vec4 d=normalize(F+uv.x*R+uv.y*U);
+ float best=6.2831853,bi=-1.;vec4 bc=vec4(0.);
+ for(int i=0;i<${N};i++){
+  vec4 c=C[i];
+  float cr=sqrt(max(1.-c.w*c.w,0.));
+  float a=dot(P,c),b=dot(d,c),Rr=sqrt(a*a+b*b);
+  if(cr<=Rr){
+   float phi=atan(b,a),del=acos(clamp(cr/Rr,-1.,1.));
+   for(int k=0;k<2;k++){
+    float t=mod(phi+(k==0?-del:del),6.2831853);
+    if(t>1e-3&&t<best){best=t;bi=float(i);bc=c;}
+   }
+  }
+ }
+ float tg=mod(atan(-P.w,d.w),3.14159265);
+ bool ground=false;
+ if(tg>1e-3&&tg<best){best=tg;ground=true;}
+ vec3 sky=vec3(.3,.5,.82);
+ vec3 col=sky;
+ vec4 p=P*cos(best)+d*sin(best);
+ vec4 L=normalize(P-p*dot(p,P));
+ if(ground){
+  vec4 n=normalize(vec4(0.,0.,0.,1.)-p*p.w);
+  float df=abs(dot(n,L));
+  float lon=atan(p.y,p.x),lat=asin(clamp(p.z,-1.,1.));
+  float ck=mod(floor(lon*1.9099)+floor(lat*3.8197),2.);
+  vec3 base=mix(vec3(.13,.36,.2),vec3(.55,.62,.35),ck);
+  col=mix(sky,base*(.35+.75*df),exp(-.13*best));
+ }else if(bi>=0.){
+  vec4 n=normalize(p*dot(p,bc)-bc);
+  float df=abs(dot(n,L));
+  vec3 base=.55+.45*cos(6.2831*(bi*.137+vec3(0.,.33,.67)));
+  float ck=sign(sin(14.*p.x)*sin(14.*p.y)*sin(14.*p.z));
+  base*=ck>0.?1.:.6;
+  vec3 lit=base*(.25+.9*df)+.2*pow(df,24.);
+  col=mix(sky,lit,exp(-.13*best));
+ }
+ gl_FragColor=vec4(col,1.);
+}`;
+function sh(t,s){const o=gl.createShader(t);gl.shaderSource(o,s);gl.compileShader(o);if(!gl.getShaderParameter(o,gl.COMPILE_STATUS)){const m=gl.getShaderInfoLog(o);console.error(m);hud.textContent='Shader error: '+m}return o}
+const pr=gl.createProgram();gl.attachShader(pr,sh(gl.VERTEX_SHADER,vs));gl.attachShader(pr,sh(gl.FRAGMENT_SHADER,fs));gl.linkProgram(pr);gl.useProgram(pr);
+gl.bindBuffer(gl.ARRAY_BUFFER,gl.createBuffer());gl.bufferData(gl.ARRAY_BUFFER,new Float32Array([-1,-1,3,-1,-1,3]),gl.STATIC_DRAW);
+const al=gl.getAttribLocation(pr,'a');gl.enableVertexAttribArray(al);gl.vertexAttribPointer(al,2,gl.FLOAT,false,0,0);
+const L_=n=>gl.getUniformLocation(pr,n);
+
+const dot=(a,b)=>a[0]*b[0]+a[1]*b[1]+a[2]*b[2];
+const nrm=a=>{const l=Math.hypot(...a);return a.map(x=>x/l)};
+const rot=(A,B,a)=>{const c=Math.cos(a),s=Math.sin(a);return[A.map((x,i)=>x*c+B[i]*s),A.map((x,i)=>-x*s+B[i]*c)]};
+
+// Objects resting on the ground: center (q cos r, sin r), radius r
+let seed=7;const rnd=()=>{seed|=0;seed=seed+0x6D2B79F5|0;let t=Math.imul(seed^seed>>>15,1|seed);t=t+Math.imul(t^t>>>7,61|t)^t;return((t^t>>>14)>>>0)/4294967296};
+const C=new Float32Array(N*4);
+for(let i=0;i<N;i++){
+ let q;do{q=nrm([0,0,0].map(()=>rnd()*2-1))}while(q[0]>.88||Math.hypot(...q)==0);
+ const r=.05+.15*rnd();
+ C.set([q[0]*Math.cos(r),q[1]*Math.cos(r),q[2]*Math.cos(r),Math.sin(r)],i*4);
+}
+const H=.07;
+let q,f,r,pit,q0;
+function reset(){q=[1,0,0];q0=[1,0,0];f=[0,1,0];r=[0,0,1];pit=0}
+reset();
+function walk(dir,s){const T=dir=='f'?f:r;const c=Math.cos(s),sn=Math.sin(s);
+ const nq=q.map((x,i)=>x*c+T[i]*sn),nT=T.map((x,i)=>-q[i]*sn+x*c);q=nq;if(dir=='f')f=nT;else r=nT}
+function fix(){q=nrm(q);f=nrm(f.map((x,i)=>x-dot(f,q)*q[i]));r=r.map((x,i)=>x-dot(r,q)*q[i]-dot(r,f)*f[i]);r=nrm(r)}
+
+const keys={};let btnF=0;
+addEventListener('keydown',e=>{keys[e.code]=1;if(e.code=='KeyR')reset()});
+addEventListener('keyup',e=>keys[e.code]=0);
+cv.addEventListener('click',()=>{try{cv.requestPointerLock()}catch(e){}});
+function lookBy(dx,dy){[f,r]=rot(f,r,dx);pit=Math.max(-1.56,Math.min(1.56,pit+dy))}
+addEventListener('mousemove',e=>{if(document.pointerLockElement==cv)lookBy(e.movementX*.0025,-e.movementY*.0025)});
+let tp=null;
+cv.addEventListener('touchstart',e=>{tp=e.touches[0]},{passive:true});
+cv.addEventListener('touchmove',e=>{const t=e.touches[0];if(tp)lookBy((t.clientX-tp.clientX)*.005,-(t.clientY-tp.clientY)*.005);tp=t},{passive:true});
+const hold=(id,v)=>{const b=document.getElementById(id);b.addEventListener('pointerdown',()=>btnF=v);['pointerup','pointerleave','pointercancel'].forEach(ev=>b.addEventListener(ev,()=>btnF=0))};
+hold('bf',1);hold('bb',-1);
+
+let last=performance.now(),n=0;
+function frame(now){
+ const dt=Math.min((now-last)/1000,.05);last=now;
+ const sp=(keys.ShiftLeft||keys.ShiftRight?2.2:.7)*dt;
+ const fw=(keys.KeyW||keys.ArrowUp?1:0)-(keys.KeyS||keys.ArrowDown?1:0)+btnF;
+ const st=(keys.KeyD||keys.ArrowRight?1:0)-(keys.KeyA||keys.ArrowLeft?1:0);
+ if(fw)walk('f',fw*sp);if(st)walk('r',st*sp);
+ if(++n%30==0)fix();
+ const ch=Math.cos(H),sh_=Math.sin(H),cp=Math.cos(pit),sp2=Math.sin(pit);
+ const P=[q[0]*ch,q[1]*ch,q[2]*ch,sh_];
+ const Fg=[...f,0],Ug=[-q[0]*sh_,-q[1]*sh_,-q[2]*sh_,ch];
+ const F=Fg.map((x,i)=>x*cp+Ug[i]*sp2),U=Fg.map((x,i)=>-x*sp2+Ug[i]*cp),R=[...r,0];
+ const dpr=Math.min(devicePixelRatio||1,1.5),w=Math.max(1,innerWidth*dpr|0),h2=Math.max(1,(innerHeight||600)*dpr|0);
+ if(cv.width!=w||cv.height!=h2){cv.width=w;cv.height=h2}
+ gl.viewport(0,0,w,h2);
+ gl.uniform2f(L_('res'),w,h2);
+ const sc=Math.tan(Math.PI/4); // fov scale
+ gl.uniform4fv(L_('P'),P);gl.uniform4fv(L_('F'),F);
+ gl.uniform4fv(L_('R'),R.map(x=>x*sc));gl.uniform4fv(L_('U'),U.map(x=>x*sc));
+ gl.uniform4fv(L_('C'),C);
+ gl.drawArrays(gl.TRIANGLES,0,3);
+ if(n%6==0)document.getElementById('d').textContent=Math.acos(Math.max(-1,Math.min(1,dot(q,q0)))).toFixed(2);
+ requestAnimationFrame(frame)}
+requestAnimationFrame(frame);
+</script></body></html>
