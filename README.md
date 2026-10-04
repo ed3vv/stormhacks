@@ -1,7 +1,7 @@
 # Spherical Plane World
 
 The primary version is a modular WebGL2 browser game. The native macOS Metal
-reference build remains available in `Sources/SphericalWorld`.
+reference build remains available under `native/`.
 
 Install [Node.js](https://nodejs.org/), open a terminal in this folder, and run:
 
@@ -20,6 +20,23 @@ You can also use the launcher for your operating system:
 
 The native Swift reference build is macOS-only; double-click
 `run-native.command` to launch it.
+
+## Project layout
+
+```text
+index.html                 Web entry page
+src/
+  app/                     Bootstrap, menu/HUD, and input handling
+  core/                    Reusable math utilities
+  game/golf/               Golf state, physics, and course data
+  graphics/                Camera, WebGL renderer, and shaders
+  styles/                  Web interface styles
+tools/                     Development server and validation scripts
+native/                    Swift/Metal reference application
+legacy/                    Archived standalone prototype
+```
+
+Run `npm run check` to syntax-check every JavaScript module.
 
 Move the cursor horizontally to steer the center of the automatic aiming sweep,
 and vertically to set the launch height, from nearly flat up to straight up.

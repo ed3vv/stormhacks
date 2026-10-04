@@ -1,5 +1,5 @@
 import { vertexShader, fragmentShader } from './shaders.js';
-import { packedBoxData } from './world-data.js';
+import { packedBoxData } from '../game/golf/course-data.js';
 
 export class Renderer {
   constructor(canvas,model,camera){

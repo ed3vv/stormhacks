@@ -1,4 +1,4 @@
-import { dot, add, sub, mul, len, norm, xyz, clamp, tangent, cross4 } from './vec.js';
+import { dot, add, mul, len, norm, xyz, clamp, tangent, cross4 } from '../core/vector.js';
 
 const LEASH=.34, MIN_EYE_ALTITUDE=.08, LOOK_RATE=5, SETTLE_TIME=.7;
 const ease = t => t*t*(3-2*t);

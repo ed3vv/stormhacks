@@ -1,5 +1,5 @@
-import { BOXES, PHYSICS_BOX_COUNT } from './world-data.js';
-import { dot, add, sub, mul, len, norm, cross, xyz, clamp } from './vec.js';
+import { BOXES, PHYSICS_BOX_COUNT } from './course-data.js';
+import { dot, add, sub, mul, len, norm, cross, xyz, clamp } from '../../core/vector.js';
 
 const DEFAULT_LAUNCH=24*Math.PI/180, MIN_LAUNCH=2*Math.PI/180, MAX_LAUNCH=Math.PI/2;
 export const GUIDE_DOTS=9;

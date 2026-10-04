@@ -1,4 +1,4 @@
 #!/bin/zsh
 set -e
 cd "${0:A:h}"
-swift run SphericalWorld
+swift run --package-path native SphericalWorld
