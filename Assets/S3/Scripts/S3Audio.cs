@@ -38,7 +38,7 @@ public class S3Audio : MonoBehaviour
     [Range(0, 1)] public float hitVolume = 0.65f;
     [Range(0, 1)] public float jingleVolume = 0.9f;
     [Tooltip("Extra level for the win jingle, on top of jingleVolume.")]
-    [Range(0, 1)] public float winVolume = 0.65f;
+    [Range(0, 1)] public float winVolume = 0.45f;
     [Range(0, 1)] public float crowdVolume = 0.8f;
     [Range(0, 1)] public float musicVolume = 0.3f;
     [Tooltip("Music level while a jingle plays, as a fraction of musicVolume.")]

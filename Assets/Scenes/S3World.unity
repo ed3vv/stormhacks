@@ -377,6 +377,7 @@ MonoBehaviour:
   player: {fileID: 1163941608}
   ballRadius: 0.31
   gravityUnits: 1.32
+  gravityFalloff: 1
   rollFrictionUnits: 0.54
   bounceSpeedUnits: 0.14
   restitution: 0.38
@@ -549,7 +550,7 @@ MonoBehaviour:
   sfxVolume: 0.8
   hitVolume: 0.65
   jingleVolume: 0.9
-  winVolume: 0.65
+  winVolume: 0.45
   crowdVolume: 0.8
   musicVolume: 0.3
   musicDuck: 0.3

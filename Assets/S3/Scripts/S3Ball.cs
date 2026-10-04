@@ -22,6 +22,12 @@ public class S3Ball
     public float R = 12f;
     public float radius = 0.1f;
     public float gravity = 9.81f;
+    /// <summary>
+    /// How much gravity weakens with height: 0 keeps it constant, 1 scales it by cos(height / R), so it
+    /// fades to nothing at the pole (a quarter lap up) and the climb over the pole costs g R instead of
+    /// g pi R / 2. Shots that stay low hardly notice (3 m up: 3% weaker).
+    /// </summary>
+    public float heightFalloff = 0f;
     public float restitution = 0.42f;
     public float bounceGrip = 0.8f;     // fraction of tangential speed kept through a bounce
     public float bounceSpeed = 0.9f;    // below this normal speed the ball rolls instead of bouncing
@@ -59,9 +65,21 @@ public class S3Ball
         return lastUp = t;
     }
 
+    /// <summary>Gravity's strength at a point with this y (sin of the height) relative to the ground.</summary>
+    public static float GravityScale(float y, float falloff) =>
+        Mathf.Lerp(1f, Mathf.Sqrt(Mathf.Max(0f, 1f - y * y)), falloff);
+
+    /// <summary>Launch speed (m/s) a ball starting at height h0 (m) needs to coast up to the pole, ignoring drag.</summary>
+    public float PoleSpeed(float h0)
+    {
+        // energy per unit mass from h0 to the pole: g R [ (1 - f)(pi/2 - h0/R) + f (1 - sin(h0/R)) ]
+        float a = h0 / R;
+        return Mathf.Sqrt(2 * gravity * R * ((1 - heightFalloff) * (0.5f * Mathf.PI - a) + heightFalloff * (1 - Mathf.Sin(a))));
+    }
+
     public void Step(float dt, float rollFriction, List<S3World.Obstacle> obstacles, List<S3Laser.Block> boxes = null)
     {
-        vel -= gravity * dt * GravityUp();
+        vel -= gravity * GravityScale(pos.y, heightFalloff) * dt * GravityUp();
         vel *= Mathf.Max(0, 1 - airDrag * dt);
         vel = S3.Tangent(pos, vel);
 

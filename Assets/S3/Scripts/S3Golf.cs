@@ -10,8 +10,9 @@ using UnityEngine.InputSystem;
 ///     the shot direction; W/S set the launch height (2°..90°); Shift for fine control. Moving
 ///     the mouse up/down tilts the view freely without touching the aim; C levels it again.
 ///   * Space starts the power meter oscillating; Space again shoots. Right-click cancels.
-///   * One club: low launches roll like putts, high ones fly. Full power straight up crosses the
-///     pole of the hemisphere (pi/2 * R overhead) and lands on the far side of the world.
+///   * One club: low launches roll like putts, high ones fly. About 80% power straight up crosses
+///     the pole of the hemisphere (pi/2 * R overhead) and lands on the far side of the world:
+///     gravity fades with height (gravityFalloff), so the climb costs less than it would at full strength.
 ///   * After every shot you are on foot where you hit from: walk to the ball (it has its own
 ///     waypoint) and press F or Tab next to it to address it again. Tab at the ball steps
 ///     away from it to look around.
@@ -35,6 +36,8 @@ public class S3Golf : MonoBehaviour
 
     [Header("Physics in ed3vv units (scaled by the world radius)")]
     public float gravityUnits = 1.32f;        // R/s^2
+    [Tooltip("0: gravity is the same at every height. 1: it fades to nothing at the pole, so a straight-up shot needs less power to go over and come down on the far side of the world.")]
+    [Range(0, 1)] public float gravityFalloff = 1f;
     public float rollFrictionUnits = 0.54f;   // R/s^2 rolling deceleration
     public float bounceSpeedUnits = 0.14f;    // below this landing speed the ball rolls instead of bouncing
     public float restitution = 0.38f;
@@ -326,6 +329,7 @@ public class S3Golf : MonoBehaviour
     void ConfigureBall(S3Ball b)
     {
         b.gravity = gravityUnits * R;
+        b.heightFalloff = gravityFalloff;
         b.restitution = restitution;
         b.bounceGrip = bounceGrip;
         b.bounceSpeed = bounceSpeedUnits * R;
@@ -757,7 +761,7 @@ public class S3Golf : MonoBehaviour
     /// <summary>Meter position whose shot just carries straight up over the pole.</summary>
     float PoleCrossingPower()
     {
-        float need = Mathf.Sqrt(2 * ball.gravity * (0.5f * Mathf.PI * R - ballRadius)) * 1.02f;
+        float need = ball.PoleSpeed(ballRadius) * 1.02f;
         float lo = 0, hi = 1;
         if (LaunchSpeed(1, R) < need) return 2;
         for (int i = 0; i < 30; i++) { float m = (lo + hi) / 2; if (LaunchSpeed(m, R) < need) lo = m; else hi = m; }
