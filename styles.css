@@ -8,3 +8,11 @@ body { font-family: ui-monospace, SFMono-Regular, Menlo, monospace; color: #eef1
 #fps, #game { font-weight: 700; }
 .help { font: 13px/1.35 system-ui, sans-serif; }
 #error { position: fixed; inset: 20px; padding: 20px; background: #300; color: #fff; white-space: pre-wrap; }
+#hud[hidden] { display: none; }
+#menu { position: fixed; inset: 0; z-index: 10; display: flex; flex-direction: column; align-items: center; justify-content: center; gap: 36px; padding: 16px; text-align: center; background: radial-gradient(circle at 50% 40%, #24356b, #070912 70%); }
+#menu[hidden], #menu [hidden] { display: none; }
+#menu h1 { margin: 0; font: 700 clamp(28px, 6vw, 60px)/1.1 system-ui, sans-serif; letter-spacing: .01em; text-shadow: 0 2px 12px rgb(0 0 0 / 60%); }
+.menu-buttons { display: flex; flex-wrap: wrap; justify-content: center; gap: 16px; }
+#menu button { min-width: 180px; padding: 14px 28px; border: 0; border-radius: 10px; background: #5b74ff; color: #fff; font: 600 20px system-ui, sans-serif; cursor: pointer; box-shadow: 0 4px 16px rgb(0 0 0 / 40%); transition: background .15s, transform .15s; }
+#menu button:hover { background: #7489ff; transform: translateY(-2px); }
+#menu-note { margin: 0; font: 16px system-ui, sans-serif; color: #b8c2ff; }

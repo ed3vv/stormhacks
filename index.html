@@ -3,12 +3,24 @@
 <head>
   <meta charset="utf-8">
   <meta name="viewport" content="width=device-width,initial-scale=1,viewport-fit=cover">
-  <title>Spherical Golf</title>
+  <title>Minigames in Spherical Geometry</title>
   <link rel="stylesheet" href="styles.css">
 </head>
 <body>
   <canvas id="world"></canvas>
-  <section id="hud">
+  <section id="menu">
+    <h1>Minigames in Spherical Geometry</h1>
+    <div id="menu-main" class="menu-buttons">
+      <button id="play">Play</button>
+    </div>
+    <div id="menu-games" class="menu-buttons" hidden>
+      <button id="play-golf">Mini golf</button>
+      <button id="play-laser">Laser maze</button>
+      <button id="play-nextbots">Nextbots</button>
+    </div>
+    <p id="menu-note" hidden>Coming soon!</p>
+  </section>
+  <section id="hud" hidden>
     <div id="fps">FPS: --</div>
     <div id="game">STROKES: 0</div>
     <div class="help">Move cursor sideways to steer · up/down to set height · Space locks direction · Space again locks power and shoots · R resets</div>
