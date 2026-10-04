@@ -25,22 +25,37 @@ export function createMenu() {
   };
 }
 
+const MIX = (a, b, t) => a.map((v, i) => Math.round(v + (b[i] - v) * t));
+
 export function createHud() {
-  const fps = byId('fps');
-  const game = byId('game');
-  const help = document.querySelector('#hud .help');
+  const nodes = {};
+  for (const id of ['scoreline', 'clubline', 'fps', 'hint', 'message', 'aim', 'meter', 'meter-label', 'meter-fill', 'meter-pole'])
+    nodes[id] = byId(id);
+  const set = (node, text) => { if (node.textContent !== text) node.textContent = text; };
 
   return {
-    setViewMode(enabled) {
-      game.hidden = enabled;
-      help.hidden = enabled;
+    setFps(frames, elapsedMilliseconds) {
+      set(nodes.fps, `FPS: ${Math.round(frames * 1000 / elapsedMilliseconds)}`);
     },
-    update(frames, elapsedMilliseconds, model) {
-      fps.textContent = `FPS: ${Math.round(frames * 1000 / elapsedMilliseconds)}`;
-      const filled = Math.round(model.power * 12);
-      const meter = '█'.repeat(filled) + '░'.repeat(12 - filled);
-      const height = Math.round(model.launchAngle * 180 / Math.PI);
-      game.textContent = `STROKES: ${model.strokes}   POWER [${meter}]   HEIGHT ${height}°   ${model.status}`;
+    update(view) {
+      set(nodes.scoreline, `Hole ${view.hole}/${view.holes}   Par ${view.par}   Strokes ${view.strokes}   Total ${view.total}`);
+      set(nodes.clubline, `Club: ${view.club}      Pin: ${view.pin.toFixed(1)} m      Pole: ${view.pole.toFixed(1)} m straight up`);
+      set(nodes.hint, view.hint);
+      set(nodes.message, view.message);
+
+      nodes.aim.hidden = !view.aiming;
+      if (view.aiming) set(nodes.aim, `HEIGHT ${Math.round(view.aimAngle)}°`);
+
+      nodes.meter.hidden = !view.charging;
+      if (view.charging) {
+        set(nodes['meter-label'], `${view.club}  ${view.shotSpeed.toFixed(1)} m/s`);
+        nodes['meter-fill'].style.width = `${view.power * 100}%`;
+        nodes['meter-fill'].style.background = `rgb(${MIX([77, 230, 77], [255, 64, 38], view.power).join(' ')})`;
+        // where the meter has to reach for a vertical shot to crest the pole
+        const showPole = view.aiming && view.aimAngle > 75 && view.poleMark <= 1;
+        nodes['meter-pole'].hidden = !showPole;
+        if (showPole) nodes['meter-pole'].style.left = `calc(${view.poleMark * 100}% - 1px)`;
+      }
     },
   };
 }

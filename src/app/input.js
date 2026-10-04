@@ -1,37 +1,67 @@
-export function bindGolfInput(canvas, model, camera, onViewModeChange) {
+// Keyboard, mouse and pointer-lock state for one frame at a time.
+export function createInput(canvas) {
+  const held = new Set(), pressed = new Set();
+  let deltaX = 0, deltaY = 0;
+  let leftHeld = false, leftPressed = false, leftReleased = false, rightPressed = false;
+
   const onKeyDown = event => {
-    if (event.code === 'KeyV' && !event.repeat) {
-      camera.setFreeView(!camera.freeView);
-      onViewModeChange(camera.freeView);
+    if (event.code === 'Space' || event.code.startsWith('Arrow')) event.preventDefault();
+    if (!event.repeat) pressed.add(event.code);
+    held.add(event.code);
+  };
+  const onKeyUp = event => held.delete(event.code);
+  const onBlur = () => { held.clear(); leftHeld = false; };
+
+  const onMouseDown = event => {
+    if (document.pointerLockElement !== canvas) {
+      canvas.requestPointerLock?.();      // the click that captures the cursor must not also swing
       return;
     }
-    if (camera.freeView) return;
-    if (event.code === 'Space') {
-      event.preventDefault();
-      if (!event.repeat) model.pressAction();
-    } else if (event.code === 'KeyR') {
-      model.reset();
-    }
+    if (event.button === 0) { leftHeld = true; leftPressed = true; }
+    if (event.button === 2) rightPressed = true;
   };
-
+  const onMouseUp = event => { if (event.button === 0) { leftHeld = false; leftReleased = true; } };
   const onMouseMove = event => {
-    if (document.pointerLockElement === canvas || event.target === canvas) {
-      if (camera.freeView) camera.look(event.movementX, event.movementY);
-      else model.look(event.movementX, event.movementY);
-    }
+    if (document.pointerLockElement !== canvas) return;
+    // the browser reports movementY growing downwards; flip it so up is positive, which is
+    // what both looking around and the launch height expect
+    deltaX += event.movementX; deltaY -= event.movementY;
   };
-
-  const capturePointer = () => canvas.requestPointerLock?.();
+  const onContextMenu = event => event.preventDefault();
 
   addEventListener('keydown', onKeyDown);
+  addEventListener('keyup', onKeyUp);
+  addEventListener('blur', onBlur);
   addEventListener('mousemove', onMouseMove);
-  canvas.addEventListener('click', capturePointer);
+  canvas.addEventListener('mousedown', onMouseDown);
+  addEventListener('mouseup', onMouseUp);
+  canvas.addEventListener('contextmenu', onContextMenu);
 
-  return () => {
-    camera.setFreeView(false);
-    onViewModeChange(false);
-    removeEventListener('keydown', onKeyDown);
-    removeEventListener('mousemove', onMouseMove);
-    canvas.removeEventListener('click', capturePointer);
+  return {
+    get locked() { return document.pointerLockElement === canvas; },
+    get mouseX() { return deltaX; },
+    get mouseY() { return deltaY; },
+    get leftHeld() { return leftHeld; },
+    get leftPressed() { return leftPressed; },
+    get leftReleased() { return leftReleased; },
+    get rightPressed() { return rightPressed; },
+    held: code => held.has(code),
+    pressed: code => pressed.has(code),
+    /** Clears the one-frame edges. Call once at the end of every frame. */
+    endFrame() {
+      pressed.clear();
+      deltaX = deltaY = 0;
+      leftPressed = leftReleased = rightPressed = false;
+    },
+    dispose() {
+      removeEventListener('keydown', onKeyDown);
+      removeEventListener('keyup', onKeyUp);
+      removeEventListener('blur', onBlur);
+      removeEventListener('mousemove', onMouseMove);
+      canvas.removeEventListener('mousedown', onMouseDown);
+      removeEventListener('mouseup', onMouseUp);
+      canvas.removeEventListener('contextmenu', onContextMenu);
+      if (document.pointerLockElement === canvas) document.exitPointerLock?.();
+    },
   };
 }

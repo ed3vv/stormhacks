@@ -21,9 +21,18 @@
     <p id="menu-note" hidden>Coming soon!</p>
   </section>
   <section id="hud" hidden>
-    <div id="fps">FPS: --</div>
-    <div id="game">STROKES: 0</div>
-    <div class="help">Move cursor sideways to steer · up/down to set height · Space locks direction · Space again shoots · V free view · R resets</div>
+    <div id="scoreline"></div>
+    <div id="clubline"></div>
+    <div id="fps"></div>
+    <div id="crosshair">+</div>
+    <div id="message"></div>
+    <div id="aim" hidden></div>
+    <div id="meter" hidden>
+      <div id="meter-label"></div>
+      <div id="meter-track"><div id="meter-fill"></div><div id="meter-pole" hidden></div></div>
+    </div>
+    <div id="hint"></div>
+    <div id="controls">WASD walk · Shift run · Space jump · Mouse look · R stand at ball · B replay last spot · N restart · Esc free mouse</div>
   </section>
   <div id="error" hidden></div>
   <script type="module" src="src/app/main.js"></script>

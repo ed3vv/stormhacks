@@ -1,14 +1,28 @@
-:root { color-scheme: dark; }
+:root { color-scheme: dark; --shadow: 0 2px 4px rgb(0 0 0 / 75%); }
 * { box-sizing: border-box; }
 html, body { margin: 0; width: 100%; height: 100%; overflow: hidden; background: #000; }
-body { font-family: ui-monospace, SFMono-Regular, Menlo, monospace; color: #eef1ff; }
-#world { position: fixed; inset: 0; width: 100%; height: 100%; display: block; }
-#hud { position: fixed; left: 14px; top: 14px; display: grid; gap: 8px; pointer-events: none; }
-#hud > div { width: max-content; max-width: min(760px, calc(100vw - 28px)); padding: 7px 10px; border-radius: 7px; background: rgb(10 13 29 / 74%); text-shadow: 0 1px 2px #000; }
-#fps, #game { font-weight: 700; }
-.help { font: 13px/1.35 system-ui, sans-serif; }
-#error { position: fixed; inset: 20px; padding: 20px; background: #300; color: #fff; white-space: pre-wrap; }
+body { font-family: ui-monospace, SFMono-Regular, Menlo, monospace; color: #fff; }
+#world { position: fixed; inset: 0; width: 100%; height: 100%; display: block; cursor: crosshair; }
+
+#hud { position: fixed; inset: 0; pointer-events: none; text-shadow: var(--shadow); }
 #hud[hidden] { display: none; }
+#hud [hidden] { display: none; }
+#scoreline { position: absolute; left: 18px; top: 12px; font-size: 22px; font-weight: 700; }
+#clubline { position: absolute; left: 18px; top: 44px; font-size: 15px; }
+#fps { position: absolute; right: 18px; top: 12px; font-size: 15px; opacity: .75; }
+#crosshair { position: absolute; left: 50%; top: 50%; translate: -50% -50%; font-size: 30px; font-weight: 700; opacity: .8; }
+#hint { position: absolute; left: 0; right: 0; bottom: 96px; text-align: center; font-size: 18px; }
+#controls { position: absolute; left: 18px; bottom: 16px; font-size: 14px; opacity: .8; }
+#message { position: absolute; left: 0; right: 0; top: 22%; text-align: center; font-size: 34px; font-weight: 700; line-height: 1.25; white-space: pre-line; }
+#aim { position: absolute; left: 0; right: 0; bottom: 184px; text-align: center; font-size: 26px; font-weight: 700; }
+
+#meter { position: absolute; left: 50%; bottom: 128px; translate: -50% 0; width: 320px; }
+#meter-label { margin-bottom: 6px; text-align: center; font-size: 15px; }
+#meter-track { position: relative; height: 18px; padding: 3px; background: rgb(0 0 0 / 60%); }
+#meter-fill { height: 100%; width: 0; background: #4ce54c; }
+#meter-pole { position: absolute; top: -2px; bottom: -2px; width: 2px; background: rgb(255 255 255 / 85%); }
+
+#error { position: fixed; inset: 20px; padding: 20px; background: #300; color: #fff; white-space: pre-wrap; }
 #menu { position: fixed; inset: 0; z-index: 10; display: flex; flex-direction: column; align-items: center; justify-content: center; gap: 36px; padding: 16px; text-align: center; background: radial-gradient(circle at 50% 40%, #24356b, #070912 70%); }
 #menu[hidden], #menu [hidden] { display: none; }
 #menu h1 { margin: 0; font: 700 clamp(28px, 6vw, 60px)/1.1 system-ui, sans-serif; letter-spacing: .01em; text-shadow: 0 2px 12px rgb(0 0 0 / 60%); }
