@@ -93,8 +93,9 @@ public static class S3Setup
     /// Graphics and performance settings for the open S3 scene:
     ///   * a global post-processing volume with one profile per map (bloom, neutral tonemapping,
     ///     grading, vignette; all effects that don't read depth, which isn't Euclidean here),
-    ///   * SMAA on the camera instead of MSAA,
-    ///   * no camera depth / opaque texture copies (nothing reads them; they cost two passes a frame).
+    ///   * 4x MSAA for the thin grass blades and edges, plus SMAA on the camera for the rest,
+    ///   * no camera depth / opaque texture copies (nothing reads them; they cost two passes a frame),
+    ///   * the materials for the laser light, glows and ambient particles, and the maps' looks.
     /// </summary>
     [MenuItem("S3/Setup Graphics")]
     public static void SetupGraphics()
@@ -106,7 +107,7 @@ public static class S3Setup
             if (rp == null) continue;
             rp.supportsCameraDepthTexture = false;
             rp.supportsCameraOpaqueTexture = false;
-            rp.msaaSampleCount = 1;
+            rp.msaaSampleCount = 4;
             rp.supportsHDR = true;
             EditorUtility.SetDirty(rp);
         }
@@ -121,6 +122,7 @@ public static class S3Setup
         world.glowMaterial.SetFloat("_Intensity", 1.5f);
         world.glowMaterial.SetFloat("_Shimmer", 0.8f);
         EditorUtility.SetDirty(world.glowMaterial);
+        world.particleMaterial = ShaderMaterial($"{Root}/Materials/S3Particles.mat", "S3/Particles");
         world.basinPost = basin;
         var volume = Object.FindAnyObjectByType<Volume>();
         if (volume == null) volume = new GameObject("Post Volume").AddComponent<Volume>();
@@ -142,12 +144,26 @@ public static class S3Setup
         data.renderShadows = false;
         EditorUtility.SetDirty(data);
 
-        world.Build();
+        ResetStyles();
         var scene = world.gameObject.scene;
         EditorSceneManager.MarkSceneDirty(scene);
         EditorSceneManager.SaveScene(scene);
         AssetDatabase.SaveAssets();
         Debug.Log("[S3] Graphics set up");
+    }
+
+    /// <summary>Copies the maps' designed looks (lighting, sky, haze) from code into the open scene.</summary>
+    [MenuItem("S3/Reset Map Styles")]
+    public static void ResetStyles()
+    {
+        var world = Object.FindAnyObjectByType<S3World>();
+        Undo.RecordObject(world, "Reset map styles");
+        world.meadowStyle = S3World.MeadowLook;
+        world.desertStyle = S3World.DesertLook;
+        world.basinStyle = S3World.BasinLook;
+        EditorUtility.SetDirty(world);
+        world.Build();
+        EditorSceneManager.MarkSceneDirty(world.gameObject.scene);
     }
 
     static Material ShaderMaterial(string path, string shaderName)
@@ -212,9 +228,9 @@ public static class S3Setup
             bloom.threshold.Override(0.85f);
             bloom.intensity.Override(0.7f);
             bloom.tint.Override(new Color(0.85f, 0.95f, 1f));
-            grade.postExposure.Override(0.05f);
-            grade.contrast.Override(10f);
-            grade.saturation.Override(8f);
+            grade.postExposure.Override(-0.05f);
+            grade.contrast.Override(18f);
+            grade.saturation.Override(16f);
             wb.temperature.Override(-10f);
             wb.tint.Override(0f);
             vignette.intensity.Override(0.24f);

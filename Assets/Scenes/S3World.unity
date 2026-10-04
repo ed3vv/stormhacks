@@ -382,6 +382,7 @@ MonoBehaviour:
   restitution: 0.38
   bounceGrip: 0.9
   airDrag: 0.035
+  shotSpeed: 1.2
   minAngle: 2
   maxAngle: 90
   startAngle: 24
@@ -392,11 +393,25 @@ MonoBehaviour:
   reach: 2.5
   cameraBack: 3.6
   cameraHeight: 1.9
+  lowHeight: 0.7
+  lowBack: 3.5
+  lowBackPerMetre: 0.45
+  lowMaxBack: 8
+  lowSideAngle: 25
+  lowFollowRate: 4
+  headingRate: 2.5
+  highShotHeight: 12
+  highShotBlend: 0.5
   leash: 4.1
   followMinHeight: 1
-  followTriggerHeight: 1
   lookRate: 5
   settleTime: 0.7
+  glideDelay: 0.6
+  glideMinTime: 0.8
+  glideSecondsPerMetre: 0.04
+  glideMaxTime: 2.2
+  glideArc: 0.25
+  glideMaxArc: 6
   missRadius: 1.5
 --- !u!114 &2128898969
 MonoBehaviour:
@@ -417,32 +432,48 @@ MonoBehaviour:
   groundMaterial: {fileID: 2100000, guid: c7c9124968a41294e894036802a60ba2, type: 2}
   beamMaterial: {fileID: 2100000, guid: 89534d3b30d989346b2e61cbfe9873c3, type: 2}
   glowMaterial: {fileID: 2100000, guid: 8b141748df644294a9329d02fd4668f5, type: 2}
+  particleMaterial: {fileID: 2100000, guid: 9ee94ea8bca6c4e65a5095f5b0aee4da, type: 2}
   postVolume: {fileID: 2122515626}
   meadowPost: {fileID: 11400000, guid: 01c49fcf0b04b0942985e84b3fc6ee5a, type: 2}
   desertPost: {fileID: 11400000, guid: a5bce47b5bb47c64ba8b03ee080f14a9, type: 2}
   basinPost: {fileID: 11400000, guid: bb7d4edc7715c464fa62477fb0fb3f01, type: 2}
   meadowStyle:
     sun: {x: 0.55, y: 0.75, z: 0.35, w: 0.2}
-    sunColor: {r: 0.52, g: 0.49, b: 0.42, a: 1}
-    skyAmbient: {r: 0.68, g: 0.72, b: 0.78, a: 1}
-    groundAmbient: {r: 0.48, g: 0.5, b: 0.4, a: 1}
-    haze: {r: 0.82, g: 0.9, b: 0.96, a: 0.22}
+    sunColor: {r: 0.8, g: 0.74, b: 0.6, a: 1}
+    skyAmbient: {r: 0.6, g: 0.62, b: 0.66, a: 1}
+    groundAmbient: {r: 0.5, g: 0.48, b: 0.36, a: 1}
+    haze: {r: 0.78, g: 0.88, b: 0.96, a: 1}
+    skyColor: {r: 0.56, g: 0.74, b: 0.98, a: 1}
+    fogDensity: 0.022
+    fogHeight: 4
+    sunGlow: 0.35
+    skyTint: 0.85
     shadowTint: {r: 0.55, g: 0.62, b: 0.6, a: 1}
     shadowStrength: 0.55
   desertStyle:
     sun: {x: 0.7, y: 0.45, z: 0.25, w: 0.45}
-    sunColor: {r: 0.78, g: 0.58, b: 0.36, a: 1}
-    skyAmbient: {r: 0.62, g: 0.52, b: 0.56, a: 1}
-    groundAmbient: {r: 0.62, g: 0.46, b: 0.34, a: 1}
-    haze: {r: 0.97, g: 0.8, b: 0.7, a: 0.5}
+    sunColor: {r: 1, g: 0.76, b: 0.5, a: 1}
+    skyAmbient: {r: 0.56, g: 0.48, b: 0.54, a: 1}
+    groundAmbient: {r: 0.6, g: 0.44, b: 0.32, a: 1}
+    haze: {r: 0.98, g: 0.8, b: 0.66, a: 1}
+    skyColor: {r: 0.96, g: 0.7, b: 0.56, a: 1}
+    fogDensity: 0.035
+    fogHeight: 5
+    sunGlow: 0.35
+    skyTint: 0.7
     shadowTint: {r: 0.62, g: 0.52, b: 0.62, a: 1}
     shadowStrength: 0.6
   basinStyle:
     sun: {x: 0.8, y: 0.35, z: 0.3, w: 0.4}
-    sunColor: {r: 0.42, g: 0.38, b: 0.34, a: 1}
-    skyAmbient: {r: 0.66, g: 0.74, b: 0.88, a: 1}
-    groundAmbient: {r: 0.72, g: 0.78, b: 0.88, a: 1}
-    haze: {r: 0.86, g: 0.92, b: 1, a: 0.4}
+    sunColor: {r: 0.86, g: 0.78, b: 0.64, a: 1}
+    skyAmbient: {r: 0.5, g: 0.6, b: 0.8, a: 1}
+    groundAmbient: {r: 0.56, g: 0.63, b: 0.76, a: 1}
+    haze: {r: 0.8, g: 0.88, b: 0.98, a: 1}
+    skyColor: {r: 0.5, g: 0.66, b: 0.95, a: 1}
+    fogDensity: 0.012
+    fogHeight: 3
+    sunGlow: 0.3
+    skyTint: 0.85
     shadowTint: {r: 0.55, g: 0.65, b: 0.85, a: 1}
     shadowStrength: 0.5
   nearClip: 0.004

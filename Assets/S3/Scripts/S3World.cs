@@ -50,7 +50,7 @@ public class S3World : MonoBehaviour
         { this.template = template; this.x = x; this.z = z; this.yaw = yaw; this.mirror = mirror; }
     }
 
-    /// <summary>Per-map lighting. Colours are authored in sRGB like the vertex colours.</summary>
+    /// <summary>Per-map lighting and air. Colours are authored in sRGB like the vertex colours.</summary>
     [Serializable]
     public class Style
     {
@@ -58,7 +58,16 @@ public class S3World : MonoBehaviour
         public Color sunColor;
         public Color skyAmbient;       // light from "up" (away from the ground)
         public Color groundAmbient;    // bounce light from below
-        public Color haze;             // rgb, a = strength towards the antipode
+        public Color haze;             // the air near the ground (what the horizon fades to)
+        public Color skyColor;         // the air looking up, and what glass, ice and water reflect
+        [Tooltip("How thick the air is at the ground: fraction of light lost per metre.")]
+        public float fogDensity;
+        [Tooltip("The air thins out by e every this many metres up, so looking up (at the antipode) stays clear.")]
+        public float fogHeight;
+        [Tooltip("How much the air glows looking towards the sun.")]
+        public float sunGlow;
+        [Tooltip("How far the air shifts from haze to sky colour looking up.")]
+        public float skyTint;
         public Color shadowTint;       // baked contact shadows on the ground
         public float shadowStrength;
     }
@@ -78,38 +87,51 @@ public class S3World : MonoBehaviour
     public Material beamMaterial;
     [Tooltip("S3/Glow: the aurora and the barrier over a sealed cup.")]
     public Material glowMaterial;
+    [Tooltip("S3/Particles: pollen, dust and snow drifting around the eye.")]
+    public Material particleMaterial;
     [Tooltip("Global post-processing volume; its profile is swapped per map.")]
     public Volume postVolume;
     public VolumeProfile meadowPost;
     public VolumeProfile desertPost;
     public VolumeProfile basinPost;
-    public Style meadowStyle = new Style
+    public Style meadowStyle = MeadowLook;
+    public Style desertStyle = DesertLook;
+    public Style basinStyle = BasinLook;
+
+    // The maps' looks as designed (S3 > Reset Map Styles copies them into the scene).
+    public static Style MeadowLook => new Style
     {
         sun = new Vector4(0.55f, 0.75f, 0.35f, 0.2f),
-        sunColor = new Color(0.52f, 0.49f, 0.42f),
-        skyAmbient = new Color(0.68f, 0.72f, 0.78f),
-        groundAmbient = new Color(0.48f, 0.50f, 0.40f),
-        haze = new Color(0.82f, 0.90f, 0.96f, 0.22f),
+        sunColor = new Color(0.80f, 0.74f, 0.60f),
+        skyAmbient = new Color(0.60f, 0.62f, 0.66f),
+        groundAmbient = new Color(0.50f, 0.48f, 0.36f),
+        haze = new Color(0.78f, 0.88f, 0.96f),
+        skyColor = new Color(0.56f, 0.74f, 0.98f),
+        fogDensity = 0.022f, fogHeight = 4f, sunGlow = 0.35f, skyTint = 0.85f,
         shadowTint = new Color(0.55f, 0.62f, 0.60f),
         shadowStrength = 0.55f,
     };
-    public Style desertStyle = new Style
+    public static Style DesertLook => new Style
     {
         sun = new Vector4(0.7f, 0.45f, 0.25f, 0.45f),   // low, golden-hour sun
-        sunColor = new Color(0.78f, 0.58f, 0.36f),
-        skyAmbient = new Color(0.62f, 0.52f, 0.56f),
-        groundAmbient = new Color(0.62f, 0.46f, 0.34f),
-        haze = new Color(0.97f, 0.80f, 0.70f, 0.5f),
+        sunColor = new Color(1.00f, 0.76f, 0.50f),
+        skyAmbient = new Color(0.56f, 0.48f, 0.54f),
+        groundAmbient = new Color(0.60f, 0.44f, 0.32f),
+        haze = new Color(0.98f, 0.80f, 0.66f),
+        skyColor = new Color(0.96f, 0.70f, 0.56f),
+        fogDensity = 0.035f, fogHeight = 5f, sunGlow = 0.35f, skyTint = 0.7f,
         shadowTint = new Color(0.62f, 0.52f, 0.62f),
         shadowStrength = 0.6f,
     };
-    public Style basinStyle = new Style
+    public static Style BasinLook => new Style
     {
         sun = new Vector4(0.8f, 0.35f, 0.3f, 0.4f),     // low, pale polar day
-        sunColor = new Color(0.42f, 0.38f, 0.34f),
-        skyAmbient = new Color(0.66f, 0.74f, 0.88f),
-        groundAmbient = new Color(0.72f, 0.78f, 0.88f),
-        haze = new Color(0.86f, 0.92f, 1.0f, 0.4f),
+        sunColor = new Color(0.86f, 0.78f, 0.64f),
+        skyAmbient = new Color(0.50f, 0.60f, 0.80f),
+        groundAmbient = new Color(0.56f, 0.63f, 0.76f),
+        haze = new Color(0.80f, 0.88f, 0.98f),
+        skyColor = new Color(0.50f, 0.66f, 0.95f),
+        fogDensity = 0.012f, fogHeight = 3f, sunGlow = 0.3f, skyTint = 0.85f,
         shadowTint = new Color(0.55f, 0.65f, 0.85f),
         shadowStrength = 0.5f,
     };
@@ -254,6 +276,7 @@ public class S3World : MonoBehaviour
             if (!player) return;
             frame = player.ViewFrame();
         }
+        if (cam.cameraType != CameraType.SceneView) UpdateParticles(frame);
         Matrix4x4 view = ViewMatrix(frame);
         cameraCmd ??= new CommandBuffer { name = "S3 camera" };
         cameraCmd.Clear();
@@ -279,6 +302,48 @@ public class S3World : MonoBehaviour
 
     static Matrix4x4 ViewMatrix(Matrix4x4 cameraFrame) => Matrix4x4.Scale(new Vector3(1, 1, -1)) * cameraFrame.transpose;
 
+    // ------------------------------------------------------------------ ambient particles
+
+    Renderer particles;
+    Vector4 particleBox;
+    bool particleInit;
+    Vector4 particleFoot, particleFwd;
+    Vector2 particleShift;
+    static MaterialPropertyBlock particleBlock;
+
+    /// <summary>
+    /// Keeps the box of particles on the eye's foot. Its heading is carried along (parallel transport)
+    /// rather than turning with the view, and how far the eye walks is passed to the shader, so the
+    /// particles hold still in the world as the box follows.
+    /// </summary>
+    void UpdateParticles(Matrix4x4 eye)
+    {
+        if (!particles) return;
+        Vector4 foot = S3.Foot(eye.GetColumn(3));
+        Vector4 fwd = particleInit ? S3.Ortho(particleFwd, foot, S3.EY) : Vector4.zero;
+        if (fwd == Vector4.zero) fwd = S3.Ortho(S3.EZ, foot, S3.EY);
+        if (fwd == Vector4.zero) fwd = S3.Ortho(S3.EX, foot, S3.EY);
+        Matrix4x4 frame = S3.FrameAt(foot, S3.EY, fwd);
+        if (particleInit)
+        {
+            Vector4 step = (foot - particleFoot) * radius;
+            if (step.sqrMagnitude < 4f)   // a jump (new map, new hole) just starts afresh
+            {
+                particleShift.x = Mathf.Repeat(particleShift.x + Vector4.Dot(step, frame.GetColumn(0)), particleBox.x);
+                particleShift.y = Mathf.Repeat(particleShift.y + Vector4.Dot(step, frame.GetColumn(2)), particleBox.z);
+            }
+        }
+        particleFoot = foot;
+        particleFwd = frame.GetColumn(2);
+        particleInit = true;
+        SetFrame(particles, frame);
+        particleBlock ??= new MaterialPropertyBlock();
+        particles.GetPropertyBlock(particleBlock);
+        particleBlock.SetVector("_S3PShift", new Vector4(particleShift.x, 0, particleShift.y, 0));
+        particleBlock.SetVector("_S3PBox", particleBox);
+        particles.SetPropertyBlock(particleBlock);
+    }
+
     /// <summary>(Re)generates the ground, scenery and course. Safe to call in edit mode.</summary>
     public void Build()
     {
@@ -303,8 +368,15 @@ public class S3World : MonoBehaviour
             if (glow != null) CreateRenderer("Aurora", glow.ToMesh("S3 Glow"), glowMaterial, Matrix4x4.identity);
         }
 
+        if (particleMaterial)
+        {
+            var mesh = S3Scenery.AmbientParticles(biome, radius, out particleBox);
+            particles = CreateRenderer("Ambient Particles", mesh, particleMaterial, Matrix4x4.identity).GetComponent<Renderer>();
+            particleInit = false;
+        }
+
         var ground = new MeshBuilder();
-        ground.GroundDisk(radius, 96, 192, Color.white);
+        ground.GroundDisk(radius, 160, 320, Color.white);   // fine enough for crisp baked shadows
         BakeGroundShadows(ground);
         CreateRenderer("Ground", ground.ToMesh("S3 Ground"), groundMaterial, Matrix4x4.identity);
 
@@ -358,16 +430,29 @@ public class S3World : MonoBehaviour
     {
         Style st = ActiveStyle;
         Color tint = st.shadowTint;
+        // flat arrays and squared chords: this runs for every ground vertex against every caster
+        int n = casters.Count;
+        var cx = new float[n]; var cy = new float[n]; var cz = new float[n]; var cw = new float[n];
+        var reach2 = new float[n]; var falloff = new float[n]; var amount = new float[n];
+        for (int c = 0; c < n; c++)
+        {
+            var k = casters[c];
+            cx[c] = k.foot.x; cy[c] = k.foot.y; cz[c] = k.foot.z; cw[c] = k.foot.w;
+            float reach = 2.5f * k.radius / radius;                // in unit-sphere chord length
+            reach2[c] = reach * reach;
+            falloff[c] = radius * radius / (k.radius * k.radius);  // chord^2 (unit) -> (metres / radius)^2
+            amount[c] = k.strength * st.shadowStrength;
+        }
         for (int i = 0; i < ground.verts.Count; i++)
         {
             Vector4 p = S3.Exp(ground.verts[i], radius);
             float lit = 1;
-            foreach (var c in casters)
+            for (int c = 0; c < n; c++)
             {
-                float chord = (p - c.foot).magnitude * radius;   // ~ metres for nearby points
-                float rr = c.radius;
-                if (chord > 2.5f * rr) continue;
-                lit *= 1 - c.strength * st.shadowStrength * Mathf.Exp(-(chord * chord) / (rr * rr));
+                float dx = p.x - cx[c], dy = p.y - cy[c], dz = p.z - cz[c], dw = p.w - cw[c];
+                float d2 = dx * dx + dy * dy + dz * dz + dw * dw;   // chord^2 ~ (metres / R)^2 for nearby points
+                if (d2 > reach2[c]) continue;
+                lit *= 1 - amount[c] * Mathf.Exp(-d2 * falloff[c]);
             }
             ground.colors[i] = Color.Lerp(tint, Color.white, lit);
         }
@@ -481,9 +566,12 @@ public class S3World : MonoBehaviour
         Shader.SetGlobalVector("_S3SkyAmbient", st.skyAmbient);
         Shader.SetGlobalVector("_S3GroundAmbient", st.groundAmbient);
         Shader.SetGlobalVector("_S3Haze", st.haze);
+        Shader.SetGlobalVector("_S3SkyColor", st.skyColor);
+        Shader.SetGlobalVector("_S3Fog", new Vector4(st.fogDensity, st.fogHeight, st.sunGlow, st.skyTint));
         Shader.SetGlobalFloat("_S3Biome", (float)biome);
         Shader.SetGlobalFloat("_S3CupR", cupRadius);
-        Shader.SetGlobalFloat("_S3GreenR", greenRadius);
+        Shader.SetGlobalFloat("_S3GreenR", HasGolf ? greenRadius : 0);   // no greens without golf
+        Shader.SetGlobalVector("_S3BallInfo", Vector4.zero);              // S3Golf turns the ball's shadow on
         Shader.SetGlobalVectorArray(PatchID, patches);
         Shader.SetGlobalFloatArray(PatchRID, patchRadii);
         Shader.SetGlobalFloat("_S3PatchCount", patchCount);
@@ -496,7 +584,19 @@ public class S3World : MonoBehaviour
         Shader.SetGlobalVector(EyeID, cameraFrame.GetColumn(3));
     }
 
-    public void SetActiveCup(Vector4 cup) => Shader.SetGlobalVector("_S3Hole", cup);
+    /// <summary>The hole being played: its green and cup, and the mown tee.</summary>
+    public void SetActiveHole(Vector4 tee, Vector4 cup)
+    {
+        Shader.SetGlobalVector("_S3Hole", cup);
+        Shader.SetGlobalVector("_S3Tee", tee);
+    }
+
+    /// <summary>The golf ball, for its shadow on the ground (radius in metres; 0 hides it).</summary>
+    public static void SetBall(Vector4 position, float radius)
+    {
+        Shader.SetGlobalVector("_S3Ball", position);
+        Shader.SetGlobalVector("_S3BallInfo", new Vector4(radius, radius > 0 ? 1 : 0, 0, 0));
+    }
 
     /// <summary>Ground distance in metres between two points (their feet).</summary>
     public float GroundDistance(Vector4 a, Vector4 b) => S3.Dist(S3.Foot(a), S3.Foot(b)) * radius;

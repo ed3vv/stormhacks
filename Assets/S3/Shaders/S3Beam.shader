@@ -49,6 +49,7 @@ Shader "S3/Beam"
                 float4 color : COLOR;
                 float2 edge  : TEXCOORD0;   // (edge, metres along the beam)
                 float alpha  : TEXCOORD1;
+                float4 p4    : TEXCOORD2;
             };
 
             Varyings Vert(Attributes a)
@@ -82,6 +83,7 @@ Shader "S3/Beam"
                 float4 q;
                 o.clip = S3Clip(p, q);
                 o.color = a.color;
+                o.p4 = p;
                 o.edge = float2(a.pos.x, t * _S3R);
                 // thin far-away ribbons are widened, so fade them to keep the same brightness
                 o.alpha = a.info.z * saturate(a.info.x / halfWidth * 1.5);
@@ -96,6 +98,8 @@ Shader "S3/Beam"
                 float a = saturate(core + 0.45 * prof * prof) * i.alpha;
                 // saturated colour with a thin hot core (white only at the very centre)
                 float3 col = i.color.rgb * _Intensity * (1 + 0.8 * core) * flow + 0.35 * core * core * _Intensity;
+                float3 scatter;
+                col *= S3Fog(normalize(i.p4), scatter);
                 return float4(col * a, a * 0.85);
             }
             ENDHLSL

@@ -323,7 +323,7 @@ public class S3Golf : MonoBehaviour
         ball.Place(Hole.tee);
         lastShot = ball.Foot;
         state = State.Ready;
-        world.SetActiveCup(Hole.cup);
+        world.SetActiveHole(Hole.tee, Hole.cup);
         Vector4 toTee = S3.DirTo(Hole.cup, Hole.tee);
         S3World.SetFrame(flagRenderer, S3.FrameAt(Hole.cup, S3.EY, toTee == Vector4.zero ? S3.EZ : toTee));
         aimDir = viewDir = DirectionToCup();
@@ -838,6 +838,7 @@ public class S3Golf : MonoBehaviour
     {
         ballRenderer.enabled = state != State.Sunk && state != State.Finished;
         S3World.SetFrame(ballRenderer, ball.frame);
+        S3World.SetBall(ball.pos, ballRenderer.enabled ? ballRadius : 0);
         bool aiming = state == State.Ready && !exploring;
         Vector4 d = ShotDirection;
         arrowRenderer.enabled = guideRenderer.enabled = aiming && d != Vector4.zero;

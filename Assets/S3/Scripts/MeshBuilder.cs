@@ -4,8 +4,22 @@ using UnityEngine;
 using UnityEngine.Rendering;
 
 /// <summary>
-/// Collects flat-shaded, vertex-coloured triangles in local Euclidean metre coordinates.
-/// Faces are pre-tessellated to <see cref="maxEdge"/> so the exponential map onto S^3
+/// Surface materials for S3/Object, stored per vertex. Each one has its own procedural texture in
+/// the prop's local metres (so it stays put as the prop is carried onto S^3) and its own lighting
+/// (translucent leaves, glossy glass and ice, sparkling snow...). Detail fades in only once it is
+/// big enough on screen, so things stay crisp up close and when magnified near the antipode.
+/// </summary>
+public static class S3Mat
+{
+    public const float Plain = 0, Grass = 1, Leaves = 2, Bark = 3, Stone = 4, Plaster = 5, RoofTile = 6, Wood = 7,
+        Glass = 8, Adobe = 9, Brick = 10, Cloth = 11, Sand = 12, Snow = 13, Ice = 14, Metal = 15, Ball = 16,
+        Mushroom = 17, Frond = 18, Paving = 19, Needles = 20, PalmBark = 21, Sandstone = 22, IceBlock = 23,
+        Cactus = 24, Petal = 25, Paint = 26;
+}
+
+/// <summary>
+/// Collects vertex-coloured triangles in local Euclidean metre coordinates, flat-shaded unless
+/// built smooth. Faces are pre-tessellated to <see cref="maxEdge"/> so the exponential map onto S^3
 /// bends them smoothly instead of leaving long straight chords.
 /// </summary>
 public class MeshBuilder
@@ -16,7 +30,10 @@ public class MeshBuilder
     public readonly List<int> tris = new List<int>();
     public readonly List<Vector4> props = new List<Vector4>();      // uv1: prop's foot on S^3 (wind phase)
     public readonly List<Vector4> propInfo = new List<Vector4>();   // uv2: (see-through index, wind sway, 0, 0)
+    public readonly List<Vector4> local = new List<Vector4>();      // uv3: (position in the prop's own metres, material)
     public float maxEdge;
+    /// <summary>The <see cref="S3Mat"/> given to everything added from now on.</summary>
+    public float material;
 
     public MeshBuilder(float maxEdge = 0.5f) { this.maxEdge = maxEdge; }
 
@@ -24,6 +41,7 @@ public class MeshBuilder
     {
         verts.Add(p); normals.Add(n); colors.Add(c);
         props.Add(Vector4.zero); propInfo.Add(Vector4.zero);
+        local.Add(new Vector4(p.x, p.y, p.z, material));
         return verts.Count - 1;
     }
 
@@ -63,11 +81,27 @@ public class MeshBuilder
     public void Tri(Vector3 a, Vector3 b, Vector3 c, Color col)
     {
         Vector3 n = FaceNormal(a, b, c);
+        Tri(a, b, c, col, n, n, n);
+    }
+
+    /// <summary>Triangle with its own normal at each corner (smooth shading), tessellated barycentrically.</summary>
+    public void Tri(Vector3 a, Vector3 b, Vector3 c, Color col, Vector3 na, Vector3 nb, Vector3 nc)
+    {
         int k = Segments(Mathf.Max(Vector3.Distance(a, b), Mathf.Max(Vector3.Distance(b, c), Vector3.Distance(c, a))));
+        if (k == 1)   // the common case: small enough already
+        {
+            int i0 = Add(a, na.normalized, col), i1 = Add(b, nb.normalized, col), i2 = Add(c, nc.normalized, col);
+            tris.Add(i0); tris.Add(i1); tris.Add(i2);
+            return;
+        }
         var idx = new int[k + 1, k + 1];
         for (int i = 0; i <= k; i++)
             for (int j = 0; j <= k - i; j++)
-                idx[i, j] = Add(a + (b - a) * ((float)i / k) + (c - a) * ((float)j / k), n, col);
+            {
+                float u = (float)i / k, v = (float)j / k;
+                Vector3 n = (na * (1 - u - v) + nb * u + nc * v).normalized;
+                idx[i, j] = Add(a + (b - a) * u + (c - a) * v, n, col);
+            }
         for (int i = 0; i < k; i++)
             for (int j = 0; j < k - i; j++)
             {
@@ -179,9 +213,13 @@ public class MeshBuilder
         }
     }
 
-    /// <summary>Low-poly ellipsoid (subdivided icosahedron) with optional radial jitter.</summary>
+    /// <summary>
+    /// Low-poly ellipsoid (subdivided icosahedron) with optional radial jitter per vertex and smooth
+    /// random lumps (both need rng). smooth shades it; faceColor and faceMaterial vary by direction.
+    /// </summary>
     public void Icosphere(Vector3 center, Vector3 radii, int subdivisions, Color col,
-                          System.Random rng = null, float jitter = 0, Func<Vector3, Color> faceColor = null)
+                          System.Random rng = null, float jitter = 0, Func<Vector3, Color> faceColor = null, bool smooth = false,
+                          float lumps = 0, Func<Vector3, float> faceMaterial = null)
     {
         float t = (1 + Mathf.Sqrt(5)) / 2;
         var pts = new List<Vector3>
@@ -215,17 +253,38 @@ public class MeshBuilder
             }
             faces = next;
         }
+        // lumps: a few random lobes, smooth over the surface (unlike the per-vertex jitter)
+        var lobes = new Vector4[lumps > 0 && rng != null ? 7 : 0];
+        for (int j = 0; j < lobes.Length; j++)
+        {
+            var v = new Vector3((float)rng.NextDouble() * 2 - 1, (float)rng.NextDouble() * 2 - 1, (float)rng.NextDouble() * 2 - 1).normalized;
+            lobes[j] = new Vector4(v.x, v.y, v.z, (float)rng.NextDouble() * 2 - 1);
+        }
         var scaled = new Vector3[pts.Count];
         for (int i = 0; i < pts.Count; i++)
         {
             float k = 1 + (rng != null ? jitter * (float)(rng.NextDouble() * 2 - 1) : 0);
+            foreach (var l in lobes)
+            {
+                float c = Vector3.Dot(pts[i], new Vector3(l.x, l.y, l.z));
+                k += lumps * l.w * c * c * c * 0.6f;
+            }
             scaled[i] = center + Vector3.Scale(pts[i] * k, radii);
         }
+        // smooth normals: the ellipsoid's own normal (the gradient of |(p - c) / radii|^2)
+        Vector3 inv = new Vector3(1 / (radii.x * radii.x), 1 / (radii.y * radii.y), 1 / (radii.z * radii.z));
+        Vector3 N(int i) => Vector3.Scale(scaled[i] - center, inv).normalized;
         for (int f = 0; f < faces.Count; f += 3)
         {
-            Vector3 a = scaled[faces[f]], b = scaled[faces[f + 1]], c = scaled[faces[f + 2]];
-            Color fc = faceColor != null ? faceColor((pts[faces[f]] + pts[faces[f + 1]] + pts[faces[f + 2]]) / 3) : col;
-            Tri(a, b, c, fc);
+            int ia = faces[f], ib = faces[f + 1], ic = faces[f + 2];
+            Vector3 a = scaled[ia], b = scaled[ib], c = scaled[ic];
+            Vector3 dir = (pts[ia] + pts[ib] + pts[ic]) / 3;
+            Color fc = faceColor != null ? faceColor(dir) : col;
+            float before = material;
+            if (faceMaterial != null) material = faceMaterial(dir);
+            if (smooth) Tri(a, b, c, fc, N(ia), N(ib), N(ic));
+            else Tri(a, b, c, fc);
+            material = before;
         }
     }
 
@@ -255,14 +314,22 @@ public class MeshBuilder
             }
     }
 
-    /// <summary>A small quad given directly by four points of S^3, stored in log-map coordinates (frame = identity).</summary>
-    public void QuadS3(Vector4 a, Vector4 b, Vector4 c, Vector4 d, Color col, float R)
+    /// <summary>
+    /// A small quad given directly by four points of S^3, stored in log-map coordinates (frame = identity).
+    /// ua..ud, if given, replace the corners' local coordinates (S3/Glow reads them as curtain coordinates).
+    /// </summary>
+    public void QuadS3(Vector4 a, Vector4 b, Vector4 c, Vector4 d, Color col, float R,
+                       Vector4? ua = null, Vector4? ub = null, Vector4? uc = null, Vector4? ud = null)
     {
         int start = verts.Count;
+        var uvs = new[] { ua, ub, uc, ud };
+        int k = 0;
         foreach (var p in new[] { a, b, c, d })
         {
             S3.LogWithNormal(p, S3.UpAt(p), R, out Vector3 v, out Vector3 n);
-            Add(v, n, col);
+            int idx = Add(v, n, col);
+            if (uvs[k].HasValue) local[idx] = uvs[k].Value;
+            k++;
         }
         tris.Add(start); tris.Add(start + 1); tris.Add(start + 2);
         tris.Add(start); tris.Add(start + 2); tris.Add(start + 3);
@@ -296,6 +363,7 @@ public class MeshBuilder
             int idx = Add(v, n, c);
             props[idx] = foot;
             propInfo[idx] = info;
+            local[idx] = src.local[i];
         }
         foreach (int t in src.tris) tris.Add(t + offset);
     }
@@ -309,6 +377,7 @@ public class MeshBuilder
         m.SetColors(colors);
         m.SetUVs(1, props);
         m.SetUVs(2, propInfo);
+        m.SetUVs(3, local);
         m.SetTriangles(tris, 0, false);
         // Positions are S^3 coordinates, not Unity world space: never let Unity cull these.
         m.bounds = new Bounds(Vector3.zero, Vector3.one * 100000f);
