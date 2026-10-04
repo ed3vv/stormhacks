@@ -175,7 +175,7 @@ MonoBehaviour:
     e31: 0
     e32: 0
     e33: 1
-  pitch: -0.08
+  pitch: -0.08726646
 --- !u!81 &1163941609
 AudioListener:
   m_ObjectHideFlags: 0
@@ -384,8 +384,9 @@ MonoBehaviour:
   minAngle: 2
   maxAngle: 90
   startAngle: 24
-  aimRadiansPerPixel: 0.0025
-  heightRadiansPerPixel: 0.004
+  aimDegreesPerSecond: 60
+  heightDegreesPerSecond: 35
+  fineAimFactor: 0.25
   powerCycleRate: 3.2
   reach: 2.5
   cameraBack: 3.6
@@ -412,9 +413,12 @@ MonoBehaviour:
   seed: 11
   objectMaterial: {fileID: 2100000, guid: 4e0440b22f36a0444afe32e82e7979eb, type: 2}
   groundMaterial: {fileID: 2100000, guid: c7c9124968a41294e894036802a60ba2, type: 2}
+  beamMaterial: {fileID: 2100000, guid: 89534d3b30d989346b2e61cbfe9873c3, type: 2}
+  glowMaterial: {fileID: 2100000, guid: 8b141748df644294a9329d02fd4668f5, type: 2}
   postVolume: {fileID: 2122515626}
   meadowPost: {fileID: 11400000, guid: 01c49fcf0b04b0942985e84b3fc6ee5a, type: 2}
   desertPost: {fileID: 11400000, guid: a5bce47b5bb47c64ba8b03ee080f14a9, type: 2}
+  basinPost: {fileID: 11400000, guid: bb7d4edc7715c464fa62477fb0fb3f01, type: 2}
   meadowStyle:
     sun: {x: 0.55, y: 0.75, z: 0.35, w: 0.2}
     sunColor: {r: 0.52, g: 0.49, b: 0.42, a: 1}
@@ -431,6 +435,14 @@ MonoBehaviour:
     haze: {r: 0.97, g: 0.8, b: 0.7, a: 0.5}
     shadowTint: {r: 0.62, g: 0.52, b: 0.62, a: 1}
     shadowStrength: 0.6
+  basinStyle:
+    sun: {x: 0.8, y: 0.35, z: 0.3, w: 0.4}
+    sunColor: {r: 0.42, g: 0.38, b: 0.34, a: 1}
+    skyAmbient: {r: 0.66, g: 0.74, b: 0.88, a: 1}
+    groundAmbient: {r: 0.72, g: 0.78, b: 0.88, a: 1}
+    haze: {r: 0.86, g: 0.92, b: 1, a: 0.4}
+    shadowTint: {r: 0.55, g: 0.65, b: 0.85, a: 1}
+    shadowStrength: 0.5
   nearClip: 0.004
   course:
   - tee: {x: 0, y: 0}
@@ -448,24 +460,53 @@ MonoBehaviour:
   - tee: {x: 2.7, y: -6.7}
     cup: {x: -19, y: 12.1}
     par: 4
-  desertCourse:
-  - tee: {x: 0, y: 0}
-    cup: {x: 26.7, y: 19.4}
-    par: 4
-  - tee: {x: 24.3, y: 17.6}
-    cup: {x: -14, y: -10.3}
-    par: 4
-  - tee: {x: -11.9, y: -18.4}
-    cup: {x: 8.6, y: 13.2}
-    par: 5
-  - tee: {x: 7.6, y: 16.6}
-    cup: {x: 6.1, y: -23.4}
-    par: 4
-  - tee: {x: 12.6, y: -21.9}
-    cup: {x: -0.1, y: 3.2}
-    par: 4
   cupRadius: 0.18
   greenRadius: 3.5
+  puzzleFrame: {x: 0, y: 0, z: 0}
+  basinCourse:
+  - tee: {x: 0, y: -5}
+    cup: {x: -2.5, y: 7}
+    par: 3
+  - tee: {x: -5.5, y: 6.5}
+    cup: {x: 3, y: 28.5}
+    par: 4
+  - tee: {x: 6, y: 27}
+    cup: {x: 15, y: 6}
+    par: 4
+  - tee: {x: 17.5, y: 3}
+    cup: {x: -25.17, y: 4.19}
+    par: 5
+  - tee: {x: -22.5, y: 2.5}
+    cup: {x: 14.97, y: -1.66}
+    par: 5
+  basinLocks:
+  - template: 0
+    x: 7.5
+    z: -2
+    yaw: 270
+    mirror: 0
+  - template: 1
+    x: -12
+    z: 14.5
+    yaw: 30
+    mirror: 1
+  - template: 3
+    x: 20
+    z: 22
+    yaw: 180
+    mirror: 0
+  - template: 2
+    x: -34.17
+    z: -4.81
+    yaw: 15
+    mirror: 0
+  - template: 4
+    x: 4.97
+    z: 3.34
+    yaw: 165
+    mirror: 1
+  basinLake: {x: 0, y: 17.5, z: 6.8}
+  barrierRadius: 3.1
 --- !u!4 &2128898970
 Transform:
   m_ObjectHideFlags: 0

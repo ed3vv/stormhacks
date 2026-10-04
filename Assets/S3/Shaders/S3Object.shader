@@ -17,6 +17,8 @@ Shader "S3/Object"
     {
         _Color ("Tint", Color) = (1, 1, 1, 1)
         [Toggle] _Ground ("Ground pattern", Float) = 0
+        _Dither ("See-through (holograms)", Float) = 0
+        _Glow ("Glow", Float) = 0
     }
 
     SubShader
@@ -29,6 +31,8 @@ Shader "S3/Object"
         CBUFFER_START(UnityPerMaterial)
             float4 _Color;
             float _Ground;
+            float _Dither;
+            float _Glow;
         CBUFFER_END
 
         float4x4 _S3Model;   // per renderer: object frame in SO(4)
@@ -41,8 +45,8 @@ Shader "S3/Object"
         float4 _S3Sun;            // fixed R^4 vector; its tangent part is the light direction
         float4 _S3SunColor, _S3SkyAmbient, _S3GroundAmbient;
         float4 _S3Haze;           // rgb haze colour, a = strength towards the antipode
-        float _S3Biome;           // 0 meadow, 1 desert
-        float4 _S3Patch[16];      // desert grass patches: centre on S^3
+        float _S3Biome;           // 0 meadow, 1 desert, 2 aurora basin
+        float4 _S3Patch[16];      // desert grass patches / basin lakes: centre on S^3
         float _S3PatchR[16];      // ... and radius in metres
         float _S3PatchCount;
 
@@ -128,7 +132,7 @@ Shader "S3/Object"
             o.clip = clip;
             o.color = a.color;
             int idx = (int)(a.propInfo.x + 0.5);
-            o.fade = idx > 0 ? _S3PropFade[min(idx - 1, 511)] * _S3Fade : 0;
+            o.fade = max(idx > 0 ? _S3PropFade[min(idx - 1, 511)] * _S3Fade : 0, _Dither);
             return o;
         }
 
@@ -174,23 +178,49 @@ Shader "S3/Object"
             return lerp(sand, grass, patch);
         }
 
+        float3 BasinGround(float4 p, float3 g, float n1, float n2, float n3)
+        {
+            // snow with soft blue hollows, wind ripples (sastrugi) and a sparkle here and there
+            float3 snow = lerp(float3(0.93, 0.96, 0.99), float3(0.79, 0.85, 0.93), smoothstep(0.55, 0.85, n1) * 0.7);
+            snow *= 0.95 + 0.06 * n2;
+            float sastrugi = sin(g.x * 1.7 - g.y * 2.3 + n2 * 4) * 0.5 + 0.5;
+            snow *= 0.97 + 0.04 * sastrugi;
+            if (Hash(floor(g * 5)) > 0.993) snow = float3(1.05, 1.05, 1.1);
+            // frozen lakes (the registered patches) with cracks and glints; purely cosmetic
+            float lake = 0;
+            for (int k = 0; k < 16; k++)
+            {
+                if (k >= (int)_S3PatchCount) break;
+                float dl = S3Dist(p, _S3Patch[k]) * _S3R - _S3PatchR[k] - (n1 - 0.5) * 1.4;
+                lake = max(lake, 1 - smoothstep(-0.35, 0, dl));
+            }
+            if (lake <= 0) return snow;
+            float3 ice = lerp(float3(0.62, 0.89, 0.96), float3(0.43, 0.76, 0.90), smoothstep(0.2, 0.8, n2));
+            float nc = Noise(g * 0.9 + float3(7, 0, 0)), nc2 = Noise(g * 2.1 + float3(0, 3, 0));
+            float crack = max(1 - smoothstep(0.012, 0.03, abs(nc - 0.5)), 1 - smoothstep(0.006, 0.018, abs(nc2 - 0.5)));
+            ice = lerp(ice, float3(0.29, 0.56, 0.78), crack * 0.75);
+            if (Hash(floor(g * 4)) > 0.992) ice = float3(1, 1, 1);
+            return lerp(snow, ice, lake);
+        }
+
         float3 GroundColor(float4 p)
         {
             // the ground is the unit 2-sphere in (x, z, w); scale to metres for the noise
             float3 g = float3(p.x, p.z, p.w) * _S3R;
             float n1 = Noise(g * 0.22), n2 = Noise(g * 1.1), n3 = Noise(g * 5.0);
-            float3 col = _S3Biome > 0.5 ? DesertGround(p, g, n1, n2, n3) : MeadowGround(g, n1, n2, n3);
+            float3 col = _S3Biome > 1.5 ? BasinGround(p, g, n1, n2, n3)
+                       : _S3Biome > 0.5 ? DesertGround(p, g, n1, n2, n3) : MeadowGround(g, n1, n2, n3);
 
             float dh = S3Dist(p, _S3Hole) * _S3R;   // metres from the cup
             float green = 1 - smoothstep(_S3GreenR - 0.25, _S3GreenR, dh);
-            float3 putting = float3(0.47, 0.78, 0.34) * (0.96 + 0.06 * n3);
+            float3 putting = (_S3Biome > 1.5 ? float3(0.84, 0.90, 0.97) : float3(0.47, 0.78, 0.34)) * (0.96 + 0.06 * n3);
             float stripe = step(0.5, frac(g.x * 0.5));
             putting *= 0.97 + 0.05 * stripe;
             col = lerp(col, putting, green);
             float cup = 1 - smoothstep(_S3CupR - 0.015, _S3CupR + 0.015, dh);
             float rim = (1 - smoothstep(_S3CupR + 0.015, _S3CupR + 0.06, dh)) * (1 - cup);
             col = lerp(col, float3(0.94, 0.94, 0.90), rim * 0.65);
-            return lerp(col, float3(0.04, 0.05, 0.03), cup);
+            return lerp(col, _S3Biome > 1.5 ? float3(0.10, 0.14, 0.20) : float3(0.04, 0.05, 0.03), cup);
         }
 
         float4 S3Frag(Varyings i) : SV_Target
@@ -218,6 +248,8 @@ Shader "S3/Object"
             // soft rim of sunlight on silhouettes
             float rim = pow(1 - saturate(dot(n, toEye)), 4);
             col += base * _S3SunColor.rgb * rim * 0.35 * (0.4 + 0.6 * diff);
+            // emissive: vertex alpha below 1 (lenses, crystals) plus a per-renderer glow
+            col += base * ((1 - i.color.a) * 1.6 + _Glow);
 
             float t = atan2(length(i.q.xyz), i.q.w);   // geodesic distance from the eye
             col = lerp(col, _S3Haze.rgb, _S3Haze.a * smoothstep(0.4 * PI, PI, t));

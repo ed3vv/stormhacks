@@ -57,7 +57,7 @@ public class S3Ball
         return lastUp = t;
     }
 
-    public void Step(float dt, float rollFriction, List<S3World.Obstacle> obstacles)
+    public void Step(float dt, float rollFriction, List<S3World.Obstacle> obstacles, List<S3Laser.Block> boxes = null)
     {
         vel -= gravity * dt * GravityUp();
         vel *= Mathf.Max(0, 1 - airDrag * dt);
@@ -115,6 +115,23 @@ public class S3Ball
                 if (d >= min || d < 1e-5f) continue;
                 Vector4 away = -S3.DirTo(foot, o.foot);
                 pos = S3.Lift(S3.Walk(foot, away, (min - d) / R), h / R);
+                Vector4 a = S3.Ortho(away, pos);
+                float va = Vector4.Dot(vel, a);
+                if (va < 0) vel -= 1.55f * va * a;
+                vel = S3.Tangent(pos, vel);
+            }
+
+        // laser puzzle pieces (mirrors, walls, emitters...) as solid boxes
+        if (boxes != null)
+            foreach (var b in boxes)
+            {
+                float h = HeightM;
+                if (h - radius > b.size.z) continue;
+                Vector4 foot = Foot;
+                if (!b.PushCircle(foot, radius / R, out Vector4 n, out float depth)) continue;
+                Vector4 away = S3.Ortho(n, foot, S3.EY);
+                if (away == Vector4.zero) continue;
+                pos = S3.Lift(S3.Walk(foot, away, depth), h / R);
                 Vector4 a = S3.Ortho(away, pos);
                 float va = Vector4.Dot(vel, a);
                 if (va < 0) vel -= 1.55f * va * a;

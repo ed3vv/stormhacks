@@ -36,7 +36,19 @@ public class S3World : MonoBehaviour
         public Obstacle(Vector4 foot, float radius, float height) { this.foot = foot; this.radius = radius; this.height = height; }
     }
 
-    public enum Biome { Meadow, Desert }
+    /// <summary>The campaign: Meadow teaches golf, Desert teaches the laser, Aurora Basin needs both.</summary>
+    public enum Biome { Meadow, Desert, Basin }
+
+    /// <summary>A laser puzzle laid out around a ground frame (local x, z metres; yaw degrees from +z towards +x).</summary>
+    [Serializable]
+    public struct LockDef
+    {
+        public S3Levels.Template template;
+        public float x, z, yaw;
+        public bool mirror;
+        public LockDef(S3Levels.Template template, float x, float z, float yaw, bool mirror = false)
+        { this.template = template; this.x = x; this.z = z; this.yaw = yaw; this.mirror = mirror; }
+    }
 
     /// <summary>Per-map lighting. Colours are authored in sRGB like the vertex colours.</summary>
     [Serializable]
@@ -62,10 +74,15 @@ public class S3World : MonoBehaviour
     [Header("Rendering")]
     public Material objectMaterial;
     public Material groundMaterial;
+    [Tooltip("S3/Beam: laser light.")]
+    public Material beamMaterial;
+    [Tooltip("S3/Glow: the aurora and the barrier over a sealed cup.")]
+    public Material glowMaterial;
     [Tooltip("Global post-processing volume; its profile is swapped per map.")]
     public Volume postVolume;
     public VolumeProfile meadowPost;
     public VolumeProfile desertPost;
+    public VolumeProfile basinPost;
     public Style meadowStyle = new Style
     {
         sun = new Vector4(0.55f, 0.75f, 0.35f, 0.2f),
@@ -86,6 +103,16 @@ public class S3World : MonoBehaviour
         shadowTint = new Color(0.62f, 0.52f, 0.62f),
         shadowStrength = 0.6f,
     };
+    public Style basinStyle = new Style
+    {
+        sun = new Vector4(0.8f, 0.35f, 0.3f, 0.4f),     // low, pale polar day
+        sunColor = new Color(0.42f, 0.38f, 0.34f),
+        skyAmbient = new Color(0.66f, 0.74f, 0.88f),
+        groundAmbient = new Color(0.72f, 0.78f, 0.88f),
+        haze = new Color(0.86f, 0.92f, 1.0f, 0.4f),
+        shadowTint = new Color(0.55f, 0.65f, 0.85f),
+        shadowStrength = 0.5f,
+    };
     [Tooltip("Depth range parameter: geometry nearer than about nearClip*R (or that close to the antipode) is clipped.")]
     public float nearClip = 0.004f;
 
@@ -102,21 +129,50 @@ public class S3World : MonoBehaviour
         new HoleDef(3.3f, 24f, 1.1f, -9.4f, 4),
         new HoleDef(2.7f, -6.7f, -19f, 12.1f, 4),
     };
-    public HoleDef[] desertCourse =
-    {
-        new HoleDef(0, 0, 26.7f, 19.4f, 4),
-        new HoleDef(24.3f, 17.6f, -14f, -10.3f, 4),
-        new HoleDef(-11.9f, -18.4f, 8.6f, 13.2f, 5),  // antipode
-        new HoleDef(7.6f, 16.6f, 6.1f, -23.4f, 4),
-        new HoleDef(12.6f, -21.9f, -0.1f, 3.2f, 4),   // home, past the fort
-    };
     public float cupRadius = 0.62f;
     public float greenRadius = 3.5f;
 
+    // The Desert has no golf: its five laser puzzles all stand around one spot, one at a time.
+    [Header("Desert puzzles")]
+    [Tooltip("Where the laser puzzles stand: local x, z metres, and yaw (degrees) of their north.")]
+    public Vector3 puzzleFrame = new Vector3(0, 0, 0);
+
+    // The Aurora Basin: every cup is sealed under an ice barrier until a laser lights the crystal
+    // beside it. The locks are the Desert's puzzles again, placed (and checked by S3Setup) so the
+    // solved light misses the tees and greens. The frozen lake is only scenery.
+    [Header("Aurora Basin")]
+    public HoleDef[] basinCourse =
+    {
+        new HoleDef(0, -5, -2.5f, 7, 3),                // First Ice: the green sits short of the lake
+        new HoleDef(-5.5f, 6.5f, 3, 28.5f, 4),          // Skating Rink: across the lake
+        new HoleDef(6, 27, 15, 6, 4),
+        new HoleDef(17.5f, 3, -25.17f, 4.19f, 5),       // the cup is 7 m off the tee's antipode
+        new HoleDef(-22.5f, 2.5f, 14.97f, -1.66f, 5),   // Through the Lights: the cup is the tee's antipode
+    };
+    public LockDef[] basinLocks =
+    {
+        // found by S3Setup.SearchLocks
+        new LockDef(S3Levels.Template.Reflection, 7.5f, -2f, 270),
+        new LockDef(S3Levels.Template.LongWay, -12f, 14.5f, 30, true),
+        new LockDef(S3Levels.Template.Zigzag, 20f, 22f, 180),
+        new LockDef(S3Levels.Template.Antipode, -34.17f, -4.81f, 15),
+        new LockDef(S3Levels.Template.FullCircle, 4.97f, 3.34f, 165, true),
+    };
+    [Tooltip("The frozen lake: local x, z metres and radius.")]
+    public Vector3 basinLake = new Vector3(0, 17.5f, 6.8f);
+    [Tooltip("The ice barrier over a sealed cup (metres).")]
+    public float barrierRadius = 3.1f;
+
     [NonSerialized] public readonly List<Hole> holes = new List<Hole>();
     [NonSerialized] public readonly List<Obstacle> obstacles = new List<Obstacle>();
+    /// <summary>Desert: the puzzles in order. Basin: the lock on each hole's cup.</summary>
+    [NonSerialized] public readonly List<S3Levels.Level> levels = new List<S3Levels.Level>();
 
-    public Style ActiveStyle => biome == Biome.Desert ? desertStyle : meadowStyle;
+    public bool HasGolf => biome != Biome.Desert;
+    public bool HasLasers => biome != Biome.Meadow;
+    public string MapName => biome == Biome.Desert ? "Desert Oasis" : biome == Biome.Basin ? "Aurora Basin" : "Meadow";
+
+    public Style ActiveStyle => biome == Biome.Desert ? desertStyle : biome == Biome.Basin ? basinStyle : meadowStyle;
 
     // ---- props that dither away when they block the view (faded on the CPU, one value per prop)
     public const int MaxFadeProps = 512;
@@ -234,11 +290,18 @@ public class S3World : MonoBehaviour
         casters.Clear();
         patchCount = 0;
         Array.Clear(fades, 0, fades.Length);
-        foreach (var h in biome == Biome.Desert ? desertCourse : course)
-            holes.Add(new Hole { tee = S3.GroundPoint(h.tee.x, h.tee.y, radius), cup = S3.GroundPoint(h.cup.x, h.cup.y, radius), par = h.par });
+        if (biome != Biome.Desert)
+            foreach (var h in biome == Biome.Basin ? basinCourse : course)
+                holes.Add(new Hole { tee = S3.GroundPoint(h.tee.x, h.tee.y, radius), cup = S3.GroundPoint(h.cup.x, h.cup.y, radius), par = h.par });
+        BuildLevels();
 
         var scenery = S3Scenery.Build(this, new System.Random(seed));   // registers obstacles, fades, shadows, patches
         CreateRenderer("Scenery", scenery.ToMesh("S3 Scenery"), objectMaterial, Matrix4x4.identity);
+        if (glowMaterial)
+        {
+            var glow = S3Scenery.BuildGlow(this);
+            if (glow != null) CreateRenderer("Aurora", glow.ToMesh("S3 Glow"), glowMaterial, Matrix4x4.identity);
+        }
 
         var ground = new MeshBuilder();
         ground.GroundDisk(radius, 96, 192, Color.white);
@@ -247,7 +310,7 @@ public class S3World : MonoBehaviour
 
         if (postVolume)
         {
-            var profile = biome == Biome.Desert ? desertPost : meadowPost;
+            var profile = biome == Biome.Desert ? desertPost : biome == Biome.Basin ? basinPost : meadowPost;
             if (profile && postVolume.sharedProfile != profile) postVolume.sharedProfile = profile;
         }
         PushGlobals();
@@ -376,6 +439,36 @@ public class S3World : MonoBehaviour
         mpb.SetMatrix(ModelID, frame);
         r.SetPropertyBlock(mpb);
     }
+
+    /// <summary>Per-renderer glow, see-through dither (holograms) and tint for the S3/Object shader.</summary>
+    public static void SetLook(Renderer r, float glow, float dither, Color tint)
+    {
+        mpb ??= new MaterialPropertyBlock();
+        r.GetPropertyBlock(mpb);
+        mpb.SetFloat("_Glow", glow);
+        mpb.SetFloat("_Dither", dither);
+        mpb.SetColor("_Color", tint);
+        r.SetPropertyBlock(mpb);
+    }
+
+    /// <summary>A ground frame from local (x, z) metres and a yaw in degrees.</summary>
+    public Matrix4x4 LocalFrame(float x, float z, float yawDeg) => S3.GroundFrame(x, z, yawDeg * Mathf.Deg2Rad, radius);
+
+    /// <summary>Lays out the Desert puzzles, or the lock on every Basin cup.</summary>
+    void BuildLevels()
+    {
+        levels.Clear();
+        if (biome == Biome.Desert)
+        {
+            var frame = LocalFrame(puzzleFrame.x, puzzleFrame.y, puzzleFrame.z);
+            foreach (var t in S3Levels.DesertOrder) levels.Add(S3Levels.Build(t, frame, radius));
+        }
+        else if (biome == Biome.Basin)
+            for (int i = 0; i < holes.Count && i < basinLocks.Length; i++)
+                levels.Add(BuildLock(basinLocks[i]));
+    }
+
+    public S3Levels.Level BuildLock(LockDef d) => S3Levels.Build(d.template, LocalFrame(d.x, d.z, d.yaw), radius, d.mirror);
 
     void PushGlobals()
     {

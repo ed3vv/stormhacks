@@ -255,6 +255,19 @@ public class MeshBuilder
             }
     }
 
+    /// <summary>A small quad given directly by four points of S^3, stored in log-map coordinates (frame = identity).</summary>
+    public void QuadS3(Vector4 a, Vector4 b, Vector4 c, Vector4 d, Color col, float R)
+    {
+        int start = verts.Count;
+        foreach (var p in new[] { a, b, c, d })
+        {
+            S3.LogWithNormal(p, S3.UpAt(p), R, out Vector3 v, out Vector3 n);
+            Add(v, n, col);
+        }
+        tris.Add(start); tris.Add(start + 1); tris.Add(start + 2);
+        tris.Add(start); tris.Add(start + 2); tris.Add(start + 3);
+    }
+
     // ------------------------------------------------------------------ S^3 baking
 
     /// <summary>

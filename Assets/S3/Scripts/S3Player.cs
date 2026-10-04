@@ -29,6 +29,8 @@ public class S3Player : MonoBehaviour
     [System.NonSerialized] public bool inputEnabled = true;
     /// <summary>Optional last word on the view, e.g. the golf flight camera.</summary>
     public System.Func<Matrix4x4, Matrix4x4> cameraFilter;
+    /// <summary>Optional: is this ground point blocked (by laser puzzle pieces)?</summary>
+    public System.Func<Vector4, bool> blocked;
 
     /// <summary>Frame count on which the cursor was captured (that click shouldn't also swing).</summary>
     public int LockedOnFrame { get; private set; } = -1;
@@ -81,7 +83,17 @@ public class S3Player : MonoBehaviour
         {
             float speed = walkSpeed * (kb.leftShiftKey.isPressed ? runMultiplier : 1) * dt;
             float n = Mathf.Sqrt(fwd * fwd + side * side);
-            Move(side / n * speed, fwd / n * speed);
+            float dx = side / n * speed, dz = fwd / n * speed;
+            Matrix4x4 before = Ground;
+            Move(dx, dz);
+            // refuse to step into a blocker (puzzle pieces), sliding along it if possible,
+            // but always let the player out of one
+            if (blocked != null && blocked(Foot) && !blocked(before.GetColumn(3)))
+            {
+                Ground = before; Move(dx, 0);
+                if (blocked(Foot)) { Ground = before; Move(0, dz); }
+                if (blocked(Foot)) Ground = before;
+            }
         }
 
         if (jumpHeight <= 0 && kb.spaceKey.wasPressedThisFrame) jumpVelocity = jumpSpeed;
