@@ -65,6 +65,10 @@ public class S3Golf : MonoBehaviour
     public float lookRate = 5f;
     public float settleTime = 0.7f;
 
+    [Header("Sound (S3Audio)")]
+    [Tooltip("A shot that passes this close to the cup (metres, over it or beside it) and carries on plays the miss jingle.")]
+    public float missRadius = 1.5f;
+
     enum State { Ready, Moving, Sunk, Finished }
 
     const float Step = 1f / 240f;
@@ -79,6 +83,8 @@ public class S3Golf : MonoBehaviour
     bool powerSelecting, exploring;
     float power, powerPhase, accumulator, moveTime, sunkTimer, aimAngle;
     float shotMaxHeight, groundedTime;
+    float startToCup, closestToCup;   // this shot's distance to the cup when hit, and the nearest it has come
+    bool missed;                      // this shot has already played the miss jingle
     Vector4 lastShot;
     float lookPitch;   // free vertical look while addressing the ball (radians, relative to the shot)
     Vector4 aimDir;      // shot direction: horizontal unit tangent at the ball's foot
@@ -190,6 +196,7 @@ public class S3Golf : MonoBehaviour
     {
         locked = false;
         puzzle.OpenGate();
+        S3Audio.Win();
         Say("Crystal lit!\nThe cup is open.", 3.5f);
     }
 
@@ -204,7 +211,7 @@ public class S3Golf : MonoBehaviour
         ball.pos = S3.Walk(ball.pos, n, (min - d) / R);
         ball.frame.SetColumn(3, ball.pos);
         float vn = Vector4.Dot(ball.vel, n);
-        if (vn < 0) ball.vel -= 1.5f * vn * n;
+        if (vn < 0) { S3Audio.Land(-vn); ball.vel -= 1.5f * vn * n; }
         ball.vel = S3.Tangent(ball.pos, ball.vel);
     }
 
@@ -298,6 +305,7 @@ public class S3Golf : MonoBehaviour
         puzzle.Update(dt, active);
         if (puzzle.Solved && !advancing)
         {
+            S3Audio.Win();
             bool last = puzzleIndex + 1 >= world.levels.Count;
             Say(last ? "ALL PUZZLES SOLVED\nNext: the Eternal Poles" : "CRYSTAL LIT!", 3.5f);
             AdvanceIn(last ? 4.5f : 3f);
@@ -410,6 +418,7 @@ public class S3Golf : MonoBehaviour
                     if (facing != Vector4.zero) aimDir = viewDir = facing;
                     lookPitch = 0;
                     SetExploring(false);
+                    S3Audio.Click();
                 }
                 else if (state == State.Ready) Say($"Walk to your ball first ({world.GroundDistance(player.Foot, ball.Foot):0} m)", 2f);
             }
@@ -431,7 +440,7 @@ public class S3Golf : MonoBehaviour
             }
             if (kb.spaceKey.wasPressedThisFrame && state == State.Ready && !exploring)
             {
-                if (!powerSelecting) { powerSelecting = true; powerPhase = 0; power = 0; }
+                if (!powerSelecting) { powerSelecting = true; powerPhase = 0; power = 0; S3Audio.Click(); }
                 else Shoot(power);
             }
         }
@@ -567,11 +576,14 @@ public class S3Golf : MonoBehaviour
         powerSelecting = false;
         lastShot = ball.Foot;
         ball.Launch(ShotDirection, LaunchSpeed(p, R), aimAngle * Mathf.Deg2Rad);
+        S3Audio.Hit(p);
         strokes++; total++;
         state = State.Moving;
         moveTime = accumulator = 0;
         shotMaxHeight = groundedTime = 0;
         wasGrounded = false;
+        startToCup = closestToCup = S3.Dist(ball.Foot, Hole.cup) * R;
+        missed = false;
         SetExploring(true);   // watch it go, then walk to it
     }
 
@@ -584,6 +596,7 @@ public class S3Golf : MonoBehaviour
         {
             accumulator -= Step;
             ball.Step(Step, friction, world.obstacles, puzzle?.blocks);
+            S3Audio.Land(ball.impact);
             if (locked) CollideBarrier();
             shotMaxHeight = Mathf.Max(shotMaxHeight, ball.HeightM - ballRadius);
             groundedTime = ball.grounded ? groundedTime + Step : 0;
@@ -597,7 +610,8 @@ public class S3Golf : MonoBehaviour
             wasGrounded = ball.grounded;
 
             // the cup takes the ball whenever it rolls or lands in it (ed3vv has no lip-out)
-            if (!locked && S3.Dist(ball.Foot, Hole.cup) * R < world.cupRadius && ball.HeightM < ballRadius * 1.3f)
+            float toCup = S3.Dist(ball.Foot, Hole.cup) * R;
+            if (!locked && toCup < world.cupRadius && ball.HeightM < ballRadius * 1.3f)
             {
                 state = State.Sunk;
                 sunkTimer = 3f;
@@ -605,7 +619,16 @@ public class S3Golf : MonoBehaviour
                 string name = strokes == 1 ? "HOLE IN ONE!" :
                     diff <= -2 ? "Eagle!" : diff == -1 ? "Birdie!" : diff == 0 ? "Par" : diff == 1 ? "Bogey" : $"+{diff}";
                 Say($"{name}\nSunk in {strokes}", 3f);
+                S3Audio.Sunk(strokes, Hole.par);
                 return;
+            }
+
+            // went over the cup (or just beside it) and carried on past: the miss jingle, once a shot
+            closestToCup = Mathf.Min(closestToCup, toCup);
+            if (!missed && !locked && closestToCup < missRadius && closestToCup < startToCup - 0.25f && toCup > closestToCup + 0.6f)
+            {
+                missed = true;
+                S3Audio.Lose();
             }
             if (ball.grounded && ball.Speed < 0.05f)
             {

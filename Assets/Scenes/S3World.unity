@@ -354,6 +354,7 @@ GameObject:
   - component: {fileID: 2128898970}
   - component: {fileID: 2128898969}
   - component: {fileID: 2128898968}
+  - component: {fileID: 2128898971}
   m_Layer: 0
   m_Name: S3 World
   m_TagString: Untagged
@@ -396,6 +397,7 @@ MonoBehaviour:
   followTriggerHeight: 1
   lookRate: 5
   settleTime: 0.7
+  missRadius: 1.5
 --- !u!114 &2128898969
 MonoBehaviour:
   m_ObjectHideFlags: 0
@@ -522,6 +524,37 @@ Transform:
   m_Children: []
   m_Father: {fileID: 0}
   m_LocalEulerAnglesHint: {x: 0, y: 0, z: 0}
+--- !u!114 &2128898971
+MonoBehaviour:
+  m_ObjectHideFlags: 0
+  m_CorrespondingSourceObject: {fileID: 0}
+  m_PrefabInstance: {fileID: 0}
+  m_PrefabAsset: {fileID: 0}
+  m_GameObject: {fileID: 2128898967}
+  m_Enabled: 1
+  m_EditorHideFlags: 0
+  m_Script: {fileID: 11500000, guid: 2d99a8ed317034b83b63632234b35c80, type: 3}
+  m_Name: 
+  m_EditorClassIdentifier: Assembly-CSharp::S3Audio
+  hit: {fileID: 8300000, guid: 4522290fa9051194397629e17fc4ae6b, type: 3}
+  land: {fileID: 8300000, guid: e31cb1047481f674a822512a6cdc90b3, type: 3}
+  click: {fileID: 8300000, guid: 418f12e46b06c9b40ba6d1c70b1c2abe, type: 3}
+  win: {fileID: 8300000, guid: 7a90fda2fd9819641b6358c68c2c79f7, type: 3}
+  lose: {fileID: 8300000, guid: afd7c2f55ed25684e94f46084ba3e0f0, type: 3}
+  music: {fileID: 8300000, guid: ce8a30ddc653aed438cae89660793700, type: 3}
+  cheer: {fileID: 8300000, guid: 89ae1ccc1c497194d9cd4661b4e660f5, type: 3}
+  clapping: {fileID: 8300000, guid: f52033251edbf2546a834209ee23836e, type: 3}
+  slowClap: {fileID: 8300000, guid: 8a167118b2e6d994e89ea7888163650b, type: 3}
+  boo: {fileID: 8300000, guid: e044f264769780e4683ab49f753b367d, type: 3}
+  sfxVolume: 0.8
+  hitVolume: 0.65
+  jingleVolume: 0.9
+  winVolume: 0.65
+  crowdVolume: 0.8
+  musicVolume: 0.3
+  musicDuck: 0.3
+  minImpact: 1
+  loudImpact: 10
 --- !u!1660057539 &9223372036854775807
 SceneRoots:
   m_ObjectHideFlags: 0

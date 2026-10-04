@@ -236,6 +236,7 @@ public class S3Puzzle
         if (tool == Kind.Mirror) mirrorsLeft--; else diffractorsLeft--;
         ghost = null;
         TraceBeams();
+        S3Audio.Click();
     }
 
     /// <summary>Lifts a placed piece back into your hands, keeping its orientation for the hologram.</summary>
@@ -251,6 +252,7 @@ public class S3Puzzle
         targetBlock = -1;
         lastRotation = -10;
         TraceBeams();
+        S3Audio.Click();
         Flash($"Picked up the {Name(tool)}. Click to put it down again.");
     }
 
