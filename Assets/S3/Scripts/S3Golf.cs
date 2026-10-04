@@ -14,9 +14,9 @@ using UnityEngine.InputSystem;
 ///   * One club: low launches roll like putts, high ones fly. About 80% power straight up crosses
 ///     the pole of the hemisphere (pi/2 * R overhead) and lands on the far side of the world:
 ///     gravity fades with height (gravityFalloff), so the climb costs less than it would at full strength.
-///   * After every shot you are on foot where you hit from: walk to the ball (it has its own
-///     waypoint) and press F or Tab next to it to address it again. Tab at the ball steps
-///     away from it to look around.
+///   * After every shot a low camera follows the ball; once it stops, the camera glides to it and
+///     you address it again. Tab steps away from the ball to walk around, and F (E on the Meadow)
+///     glides you back to it from anywhere.
 ///
 /// The campaign runs Meadow (golf) → Desert (laser puzzles on foot, no ball) → Eternal Poles, where
 /// every cup is sealed under an ice barrier until you light the crystal beside it with the laser
@@ -44,6 +44,8 @@ public class S3Golf : MonoBehaviour
     public float restitution = 0.38f;
     public float bounceGrip = 0.9f;
     public float airDrag = 0.035f;            // per second
+    [Tooltip("Shots play back this much faster than real time. Where the ball goes doesn't change.")]
+    public float shotSpeed = 1.2f;
 
     [Header("Aim and power")]
     public float minAngle = 2f;
@@ -62,12 +64,40 @@ public class S3Golf : MonoBehaviour
     public float cameraBack = 3.6f;           // metres behind the ball (ed3vv: 0.30 R)
     public float cameraHeight = 1.9f;         // eye height (ed3vv: 0.16 R)
 
-    [Header("Flight camera")]
+    [Header("Flight camera: hangs back low, looking up at the ball (always centred)")]
+    [Tooltip("Camera height above the ground (metres).")]
+    public float lowHeight = 0.7f;
+    [Tooltip("How far behind the ball's ground track the camera sits (metres), plus lowBackPerMetre for every metre the ball climbs, up to lowMaxBack.")]
+    public float lowBack = 3.5f;
+    public float lowBackPerMetre = 0.45f;
+    public float lowMaxBack = 8f;
+    [Tooltip("Degrees off straight behind the ball, for a three-quarter view.")]
+    public float lowSideAngle = 25f;
+    [Tooltip("How tightly the camera chases its spot; lower is lazier and lags further behind fast shots.")]
+    public float lowFollowRate = 4f;
+    [Tooltip("How quickly the camera swings round when the ball changes direction (off a wall, say).")]
+    public float headingRate = 2.5f;
+    [Tooltip("Above this ball height (metres) the camera hands over to the trailing camera, which can follow a shot over the pole.")]
+    public float highShotHeight = 12f;
+    [Tooltip("Seconds the handover to and from the trailing camera takes.")]
+    public float highShotBlend = 0.5f;
+    [Header("Trailing camera for very high shots")]
     public float leash = 4.1f;                // trails the ball at most this far (ed3vv: 0.34 R)
     public float followMinHeight = 1.0f;
-    public float followTriggerHeight = 1.0f;  // shots that climb this high take the camera
+    [Tooltip("How quickly the view rolls to keep 'up' away from the ground (crossing the pole turns it over).")]
     public float lookRate = 5f;
     public float settleTime = 0.7f;
+
+    [Header("Glide to the ball")]
+    [Tooltip("Pause after the ball stops before the camera glides to it (seconds).")]
+    public float glideDelay = 0.6f;
+    [Tooltip("Glide time: this many seconds, plus glideSecondsPerMetre for every metre travelled, up to glideMaxTime.")]
+    public float glideMinTime = 0.8f;
+    public float glideSecondsPerMetre = 0.04f;
+    public float glideMaxTime = 2.2f;
+    [Tooltip("The glide arcs up by this fraction of its length (up to glideMaxArc metres) to clear buildings.")]
+    public float glideArc = 0.25f;
+    public float glideMaxArc = 6f;
 
     [Header("Sound (S3Audio)")]
     [Tooltip("A shot that passes this close to the cup (metres, over it or beside it) and carries on plays the miss jingle.")]
@@ -91,7 +121,7 @@ public class S3Golf : MonoBehaviour
     int holeIndex, strokes, total;
     bool powerSelecting, exploring;
     float power, powerPhase, accumulator, moveTime, sunkTimer, aimAngle;
-    float shotMaxHeight, groundedTime;
+    float shotMaxHeight;
     float startToCup, closestToCup;   // this shot's distance to the cup when hit, and the nearest it has come
     bool missed;                      // this shot has already played the miss jingle
     Vector4 lastShot;
@@ -101,7 +131,15 @@ public class S3Golf : MonoBehaviour
     bool wasGrounded;
     // flight camera
     float followWeight;
-    Vector4 camPos, camUp, camFwd;
+    // gliding to the ball
+    bool gliding, glidePending;
+    float glideT, glideTime, glideWait, glideLength, glideDegrees;
+    Vector3 glideAxis;
+    Matrix4x4 glideFrom;
+    Vector4 camPos, camUp, camFwd;   // trailing camera (very high shots)
+    Vector4 lowPos, flightDir;       // the low cinematic camera, and the ball's heading along the ground
+    float highWeight;                // 0 = low camera, 1 = trailing camera
+    Matrix4x4 followFrame;
     string message = "";
     float messageUntil;
     GUIStyle big, small, center, subStyle, hintStyle, meterStyle, markerStyle, iconStyle, wrapStyle;
@@ -374,6 +412,7 @@ public class S3Golf : MonoBehaviour
         aimDir = viewDir = DirectionToCup();
         lookPitch = 0;
         exploring = false;
+        gliding = glidePending = false;
         player.inputEnabled = false;
         // Basin: seal the cup and load its lock (a restart keeps a lock you already opened)
         if (puzzle != null && lockHole != index && index < world.levels.Count)
@@ -429,21 +468,20 @@ public class S3Golf : MonoBehaviour
 
         if (kb != null)
         {
-            // F or Tab addresses the ball (E too on the Meadow; on laser maps E turns pieces)
+            // F or Tab glides back to the ball from anywhere (E too on the Meadow; on laser maps E turns pieces)
             bool address = kb.fKey.wasPressedThisFrame || (puzzle == null && kb.eKey.wasPressedThisFrame);
             if (kb.tabKey.wasPressedThisFrame || address)
             {
                 if (!exploring) { if (kb.tabKey.wasPressedThisFrame) SetExploring(true); }
-                else if (state == State.Ready && NearBall)
+                else if (state == State.Ready)
                 {
-                    // aim where you were facing as you walked up
-                    Vector4 facing = S3.Ortho(player.Forward, ball.Foot, S3.EY);
-                    if (facing != Vector4.zero) aimDir = viewDir = facing;
+                    // standing at the ball: aim where you were facing as you walked up; from afar: at the cup
+                    Vector4 facing = NearBall ? S3.Ortho(player.Forward, ball.Foot, S3.EY) : Vector4.zero;
+                    aimDir = viewDir = facing != Vector4.zero ? facing : DirectionToCup();
                     lookPitch = 0;
-                    SetExploring(false);
+                    GlideToBall();
                     S3Audio.Click();
                 }
-                else if (state == State.Ready) Say($"Walk to your ball first ({world.GroundDistance(player.Foot, ball.Foot):0} m)", 2f);
             }
             if (kb.mKey.wasPressedThisFrame) { GoToMap(NextMap(world.biome)); return; }
             if (kb.rKey.wasPressedThisFrame && state != State.Sunk && state != State.Finished) { total -= strokes; StartHole(holeIndex); }
@@ -457,11 +495,12 @@ public class S3Golf : MonoBehaviour
                 followWeight = 0;
                 powerSelecting = false;
                 strokes++; total++;
-                exploring = false;
-                player.inputEnabled = false;
+                aimDir = viewDir = DirectionToCup();
+                lookPitch = 0;
+                GlideToBall();
                 Say("Ball returned (+1 stroke)", 2.5f);
             }
-            if (kb.spaceKey.wasPressedThisFrame && state == State.Ready && !exploring)
+            if (kb.spaceKey.wasPressedThisFrame && state == State.Ready && !exploring && !gliding)
             {
                 if (!powerSelecting) { powerSelecting = true; powerPhase = 0; power = 0; S3Audio.Click(); }
                 else Shoot(power);
@@ -476,7 +515,7 @@ public class S3Golf : MonoBehaviour
         Vector4 v = S3.Ortho(viewDir, foot, S3.EY);
         viewDir = v != Vector4.zero ? v : aimDir;
 
-        if (state == State.Ready && !exploring)
+        if (state == State.Ready && !exploring && !gliding)
         {
             float fine = kb != null && kb.leftShiftKey.isPressed ? fineAimFactor : 1f;
             float turn = kb == null ? 0 : (Pressed(kb.dKey, kb.rightArrowKey) - Pressed(kb.aKey, kb.leftArrowKey));
@@ -496,6 +535,8 @@ public class S3Golf : MonoBehaviour
             }
         }
         else viewDir = Turned(viewDir, foot, SignedAngle(viewDir, aimDir, foot) * (1 - Mathf.Exp(-6f * dt)));
+
+        UpdateGlide(dt);
 
         switch (state)
         {
@@ -578,6 +619,7 @@ public class S3Golf : MonoBehaviour
     void SetExploring(bool on, string message = null)
     {
         if (on == exploring) return;
+        gliding = glidePending = false;
         if (on)
         {
             // step out of the ball camera: stand where it was, looking the same way
@@ -604,16 +646,16 @@ public class S3Golf : MonoBehaviour
         strokes++; total++;
         state = State.Moving;
         moveTime = accumulator = 0;
-        shotMaxHeight = groundedTime = 0;
+        shotMaxHeight = 0;
         wasGrounded = false;
         startToCup = closestToCup = S3.Dist(ball.Foot, Hole.cup) * R;
         missed = false;
-        SetExploring(true);   // watch it go, then walk to it
+        SetExploring(true);   // watch it go; the camera glides to it once it stops
     }
 
     void Simulate(float dt)
     {
-        accumulator += Mathf.Min(dt, 0.1f);
+        accumulator += Mathf.Min(dt, 0.1f) * shotSpeed;
         moveTime += dt;
         float friction = rollFrictionUnits * R;
         solids.Clear();
@@ -626,7 +668,6 @@ public class S3Golf : MonoBehaviour
             S3Audio.Land(ball.impact);
             if (locked) CollideBarrier();
             shotMaxHeight = Mathf.Max(shotMaxHeight, ball.HeightM - ballRadius);
-            groundedTime = ball.grounded ? groundedTime + Step : 0;
 
             // like ed3vv: after landing, the camera turns to follow the way the ball is travelling
             if (ball.grounded && !wasGrounded)
@@ -662,12 +703,13 @@ public class S3Golf : MonoBehaviour
                 ball.vel = Vector4.zero;
                 state = State.Ready;
                 stopTime = 0;
+                QueueGlide();
                 if (shotMaxHeight > 0.5f * Mathf.PI * R - 1f && world.GroundDistance(lastShot, ball.Foot) > 0.5f * Mathf.PI * R)
                     Say("Over the pole!\nIt came down on the far side of the world.", 3.5f);
                 return;
             }
         }
-        if (moveTime > 40f) { ball.vel = Vector4.zero; state = State.Ready; stopTime = 0; }
+        if (moveTime > 40f) { ball.vel = Vector4.zero; state = State.Ready; stopTime = 0; QueueGlide(); }
     }
 
     // ------------------------------------------------------------------ cameras
@@ -694,33 +736,95 @@ public class S3Golf : MonoBehaviour
     Matrix4x4 ViewFor(Matrix4x4 walkingCamera)
     {
         Matrix4x4 baseFrame = exploring ? walkingCamera : BallCamera();
+        if (gliding) baseFrame = GlideFrame(baseFrame);
         if (followWeight <= 0) return baseFrame;
-        Matrix4x4 follow = S3.FrameAt(camPos, camUp, camFwd);
+        Matrix4x4 follow = followFrame;
         float s = Mathf.SmoothStep(0, 1, followWeight);
         if (s >= 1) return follow;
-        Vector4 a = baseFrame.GetColumn(3);
-        Vector4 pos = S3.Walk(a, S3.DirTo(a, camPos), S3.Dist(a, camPos) * s);
-        Vector4 up = Vector4.Lerp(baseFrame.GetColumn(1), camUp, s);
-        Vector4 fwd = Vector4.Lerp(baseFrame.GetColumn(2), camFwd, s);
+        Vector4 a = baseFrame.GetColumn(3), b = follow.GetColumn(3);
+        Vector4 pos = S3.Walk(a, S3.DirTo(a, b), S3.Dist(a, b) * s);
+        Vector4 up = Vector4.Lerp(baseFrame.GetColumn(1), follow.GetColumn(1), s);
+        Vector4 fwd = Vector4.Lerp(baseFrame.GetColumn(2), follow.GetColumn(2), s);
         return S3.FrameAt(pos, up, fwd);
     }
 
     void UpdateFollow(float dt)
     {
-        bool want = state == State.Moving && shotMaxHeight > followTriggerHeight && groundedTime < 0.35f;
+        // follow the ball from the shot until the glide back to it (or the next hole) takes over
+        bool want = state == State.Moving || state == State.Sunk || state == State.Finished || glidePending;
         if (want && followWeight <= 0)
         {
             Matrix4x4 c = player.ViewFrame();
-            camPos = c.GetColumn(3);
+            camPos = lowPos = c.GetColumn(3);
             camUp = c.GetColumn(1);
             camFwd = c.GetColumn(2);
+            flightDir = aimDir;
+            highWeight = 0;
+            followFrame = c;
         }
         followWeight = Mathf.MoveTowards(followWeight, want ? 1 : 0, dt / (want ? 0.4f : settleTime));
-        if (followWeight > 0) TrackBall(dt);
+        if (followWeight > 0)
+        {
+            TrackBall(dt);
+            followFrame = FlightFrame(dt);
+        }
     }
 
     /// <summary>
-    /// Trail the ball on a leash and turn smoothly to keep it in view (ed3vv's flight camera).
+    /// The cinematic flight camera: low to the ground, behind and a little to the side of the ball's
+    /// path, looking up at it. Very high shots blend over to the trailing camera, which can follow
+    /// the ball over the pole (there "behind the ball along the ground" stops meaning anything).
+    /// </summary>
+    Matrix4x4 FlightFrame(float dt)
+    {
+        Matrix4x4 trailing = S3.FrameAt(camPos, camUp, camFwd);
+        float h = ball.HeightM - ballRadius;
+        highWeight = Mathf.MoveTowards(highWeight, h > highShotHeight ? 1 : 0, dt / highShotBlend);
+        float high = Mathf.SmoothStep(0, 1, highWeight);
+        if (high >= 0.999f) { lowPos = camPos; return trailing; }   // pick up from here on the way down
+
+        // high up, the ball's ground point means little (it jumps across the world at the pole): hold still
+        if (h <= highShotHeight)
+        {
+            // the ball's heading along the ground, swinging round smoothly when it changes (bounces)
+            Vector4 foot = ball.Foot;
+            Vector4 heading = S3.Ortho(flightDir, foot, S3.EY);
+            if (heading == Vector4.zero) heading = DirectionToCup();
+            Vector4 v = ball.vel - Vector4.Dot(ball.vel, foot) * foot - Vector4.Dot(ball.vel, S3.EY) * S3.EY;
+            if (v.magnitude > 0.5f)
+                heading = Turned(heading, foot, SignedAngle(heading, v.normalized, foot) * (1 - Mathf.Exp(-headingRate * dt)));
+            flightDir = heading;
+
+            // the spot to chase: behind the ball, off to the side, near the ground; further back the higher it flies
+            float back = Mathf.Min(lowBack + lowBackPerMetre * Mathf.Max(0, h), lowMaxBack);
+            float side = lowSideAngle * Mathf.Deg2Rad;
+            Vector4 right = S3.FrameAt(foot, S3.EY, flightDir).GetColumn(0);
+            Vector4 away = -Mathf.Cos(side) * flightDir + Mathf.Sin(side) * right;
+            Vector4 spot = S3.Lift(S3.Walk(foot, away, back / R), lowHeight / R);
+            float d = S3.Dist(lowPos, spot);
+            Vector4 toSpot = S3.DirTo(lowPos, spot);
+            if (d > 1e-6f && toSpot != Vector4.zero) lowPos = S3.Walk(lowPos, toSpot, d * (1 - Mathf.Exp(-lowFollowRate * dt)));
+            if (Mathf.Asin(Mathf.Clamp(lowPos.y, -1f, 1f)) * R < 0.3f) lowPos = S3.Lift(S3.Foot(lowPos), 0.3f / R);
+        }
+
+        // look straight at the ball, keeping the horizon level; looking nearly straight up, where
+        // "level" stops meaning anything, keep the last frame's roll so the picture doesn't spin
+        Vector4 look = S3.DirTo(lowPos, ball.pos);
+        if (look == Vector4.zero) look = S3.Ortho(followFrame.GetColumn(2), lowPos);
+        Vector4 level = S3.UpAt(lowPos) - Vector4.Dot(S3.UpAt(lowPos), look) * look;
+        Vector4 kept = S3.Ortho(followFrame.GetColumn(1), lowPos, look);
+        float steady = Mathf.Clamp01(level.magnitude / 0.35f);
+        Vector4 up = kept == Vector4.zero ? level : S3.Ortho(Vector4.Lerp(kept, level.normalized * steady, steady), lowPos, look);
+        if (up == Vector4.zero) up = S3.Ortho(S3.EY, lowPos, look);
+        Matrix4x4 low = S3.FrameAt(lowPos, up, look);
+        if (high <= 0.001f) return low;
+
+        TurnBetween(low, trailing, out Vector3 axis, out float degrees);
+        return Blend(low, trailing.GetColumn(3), high, axis, degrees);
+    }
+
+    /// <summary>
+    /// Trail the ball on a leash, looking straight at it so it stays centred (ed3vv's flight camera).
     /// "Up" points away from the nearest ground, so crossing the pole rolls the view over.
     /// </summary>
     void TrackBall(float dt)
@@ -732,9 +836,7 @@ public class S3Golf : MonoBehaviour
 
         float k = 1 - Mathf.Exp(-lookRate * dt);
         Vector4 look = S3.DirTo(camPos, ball.pos);
-        Vector4 prevFwd = S3.Ortho(camFwd, camPos);
-        Vector4 f = look == Vector4.zero ? prevFwd : (prevFwd * (1 - k) + look * k);
-        f = S3.Ortho(f, camPos);
+        Vector4 f = look == Vector4.zero ? S3.Ortho(camFwd, camPos) : look;
         if (f != Vector4.zero) camFwd = f;
 
         Vector4 prevUp = S3.Ortho(camUp, camPos, camFwd);
@@ -748,6 +850,89 @@ public class S3Golf : MonoBehaviour
         if (side == Vector4.zero) side = S3.FrameAt(camPos, prevUp, camFwd).GetColumn(0);
         float turn = angle * k;
         camUp = Mathf.Cos(turn) * prevUp + Mathf.Sin(turn) * side;
+    }
+
+    // ------------------------------------------------------------------ gliding to the ball
+
+    /// <summary>Glide to the ball shortly after it stops, unless you've stepped away (Tab) in the meantime.</summary>
+    void QueueGlide()
+    {
+        if (!exploring) return;
+        glidePending = true;
+        glideWait = glideDelay;
+    }
+
+    /// <summary>Fly the camera from wherever it is now to the address view behind the ball.</summary>
+    void GlideToBall()
+    {
+        glideFrom = player.ViewFrame();
+        followWeight = 0;
+        powerSelecting = false;
+        exploring = false;
+        player.inputEnabled = false;
+        glidePending = false;
+        Matrix4x4 to = BallCamera();
+        glideLength = S3.Dist(glideFrom.GetColumn(3), to.GetColumn(3)) * R;
+        TurnBetween(glideFrom, to, out glideAxis, out glideDegrees);
+        glideTime = Mathf.Clamp(glideMinTime + glideSecondsPerMetre * glideLength, glideMinTime, glideMaxTime);
+        glideT = 0;
+        gliding = glideLength > 0.05f;
+    }
+
+    void UpdateGlide(float dt)
+    {
+        if (glidePending && state == State.Ready && exploring)
+        {
+            glideWait -= dt;
+            if (glideWait <= 0)
+            {
+                aimDir = viewDir = DirectionToCup();
+                lookPitch = 0;
+                GlideToBall();
+            }
+        }
+        if (gliding && (glideT += dt) >= glideTime) gliding = false;
+    }
+
+    /// <summary>The view part-way along the glide: eased, arcing up over obstacles.</summary>
+    Matrix4x4 GlideFrame(Matrix4x4 target)
+    {
+        float s = Mathf.SmoothStep(0, 1, Mathf.Clamp01(glideT / glideTime));
+        Matrix4x4 m = Blend(glideFrom, target.GetColumn(3), s, glideAxis, glideDegrees);
+        float arc = Mathf.Min(glideArc * glideLength, glideMaxArc) * Mathf.Sin(Mathf.PI * s);
+        Vector4 pos = m.GetColumn(3);
+        Vector4 up = S3.EY - pos.y * pos;
+        if (arc > 0.01f && up.magnitude > 1e-4f) m = S3.PlaneRotation(pos, up.normalized, arc / R) * m;
+        return m;
+    }
+
+    /// <summary>Frame f carried t of the way along the geodesic to point q (parallel transport).</summary>
+    static Matrix4x4 Carry(Matrix4x4 f, Vector4 q, float t)
+    {
+        Vector4 p = f.GetColumn(3), d = S3.DirTo(p, q);
+        float angle = S3.Dist(p, q);
+        return angle > 1e-5f && d != Vector4.zero ? S3.PlaneRotation(p, d, t * angle) * f : f;
+    }
+
+    /// <summary>
+    /// The turn from a's view to b's once b is carried back to a's position. Carried along the
+    /// geodesic, it's the same at every point of the glide, so it's worked out once: recomputing
+    /// it each frame lets a turn of nearly 180° flip between turning left and right.
+    /// </summary>
+    static void TurnBetween(Matrix4x4 a, Matrix4x4 b, out Vector3 axis, out float degrees)
+    {
+        Matrix4x4 rel = a.transpose * Carry(b, a.GetColumn(3), 1);   // b's axes in a's basis
+        Vector4 f = rel.GetColumn(2), u = rel.GetColumn(1);
+        Quaternion.LookRotation(new Vector3(f.x, f.y, f.z), new Vector3(u.x, u.y, u.z)).ToAngleAxis(out degrees, out axis);
+        if (degrees > 180) { degrees = 360 - degrees; axis = -axis; }
+        if (!(axis.sqrMagnitude > 0.5f)) { axis = Vector3.up; degrees = 0; }
+    }
+
+    /// <summary>The view s of the way from a to position b: a carried along the geodesic, turned s of the way.</summary>
+    static Matrix4x4 Blend(Matrix4x4 a, Vector4 b, float s, Vector3 axis, float degrees)
+    {
+        Matrix4x4 m = Carry(a, b, s) * Matrix4x4.Rotate(Quaternion.AngleAxis(s * degrees, axis));
+        return S3.FrameAt(m.GetColumn(3), m.GetColumn(1), m.GetColumn(2));
     }
 
     // ------------------------------------------------------------------ visuals
@@ -906,13 +1091,15 @@ public class S3Golf : MonoBehaviour
         Shadowed(new Rect(18, 42, 900, 24), $"{world.MapName}  ·  Total {total}  ·  Pin {world.GroundDistance(ball.Foot, Hole.cup):0} m" +
                                             (aiming ? $"  ·  Launch {aimAngle:0}°" : "") + (locked ? "  ·  Cup sealed" : ""), small);
 
-        string hint = "";
+        string hint = "", key = puzzle == null ? "E" : "F";
         if (mouseFree) hint = "Click to play";
+        else if (gliding || glidePending) hint = "";
         else if (aiming && !powerSelecting && world.GroundDistance(ball.Foot, -Hole.cup) < world.greenRadius)
             hint = "On the flag's antipode: hit it straight up (W) at full power and it comes down on the green";
         else if (aiming) hint = powerSelecting ? "Space  shoot   ·   Right-click  cancel" : "A/D  aim   ·   W/S  height   ·   Space  power";
-        else if (state == State.Ready && NearBall) hint = $"{(puzzle == null ? "E" : "F")}  address ball";
-        else if (state == State.Ready && locked) hint = $"Light {TheCrystal} to open the cup";
+        else if (state == State.Ready && NearBall) hint = $"{key}  address ball";
+        else if (state == State.Ready && locked) hint = $"Light {TheCrystal} to open the cup   ·   {key}  back to ball";
+        else if (state == State.Ready) hint = $"{key}  back to ball";
         Shadowed(new Rect(0, h - 120, w, 30), hint, hintStyle);
         DrawFooter(h);
 
@@ -975,7 +1162,7 @@ public class S3Golf : MonoBehaviour
             var c = new Color(0.55f, 0.9f, 1f, Steepness);
             DrawMarker(S3.Lift(-ball.Foot, 2.2f / R), c, $"over the pole: {world.GroundDistance(-ball.Foot, Hole.cup):0} m from the pin", "◎");
         }
-        if (exploring && state != State.Sunk)
+        if (exploring && state != State.Sunk && followWeight < 0.5f && !gliding)   // no marker on the ball the camera is following
         {
             // the ball's marker says what it's doing, and pops when it comes to rest
             float d = world.GroundDistance(player.Foot, ball.Foot);
@@ -1020,7 +1207,7 @@ public class S3Golf : MonoBehaviour
     static readonly string[] ControlLines =
     {
         "Golf:   A/D or mouse aim  ·  W/S height (Shift fine)  ·  Space power, Space shoot  ·  Right-click cancel  ·  C level the view",
-        "Tab walk around  ·  E / F address ball  ·  B replay last spot (+1)  ·  R restart  ·  N start over",
+        "Tab walk around  ·  E / F back to the ball  ·  B replay last spot (+1)  ·  R restart  ·  N start over",
         "Laser:   click place / pick up  ·  Q/E turn  ·  1 / 2 or wheel switch piece  ·  H puzzle hint",
         "Walking:   WASD, Shift run, Space jump  ·  M next map  ·  Esc free the mouse",
         "Antipodes:   straight up at full power, a ball comes down 37.7 m away",
