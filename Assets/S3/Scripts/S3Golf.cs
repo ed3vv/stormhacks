@@ -193,8 +193,21 @@ public class S3Golf : MonoBehaviour
 
     void Start()
     {
+        if (Application.isPlaying) S3Graphics.Apply(player ? player.GetComponent<Camera>() : Camera.main);
         Init();
         if (showTitle && Application.isPlaying) ShowTitle();
+    }
+
+    void OnDestroy() => S3Graphics.Restore();
+
+    /// <summary>G or the pause menu: Quality (render scale 1.5, SMAA) or Performance (1.0, MSAA only).</summary>
+    void ToggleGraphics()
+    {
+        var mode = S3Graphics.Toggle(player.GetComponent<Camera>());
+        S3Audio.Click();
+        if (hud.Current == S3HudView.Menu.Pause) OpenPause();   // refresh its button
+        else if (hud.Current == S3HudView.Menu.None)
+            Say($"{S3Graphics.Name(mode)} mode\n" + (mode == S3Graphics.Mode.Quality ? "Render scale 1.5  ·  4× MSAA + SMAA" : "Render scale 1.0  ·  4× MSAA  ·  about 2× the frame rate"), 2.5f);
     }
 
     // ------------------------------------------------------------------ title screen
@@ -390,7 +403,8 @@ public class S3Golf : MonoBehaviour
     void OpenPause()
     {
         PauseForMenu();
-        hud.ShowPause(world.HasGolf ? "Restart hole" : "Restart puzzle", CloseMenus, () => { CloseMenus(); Restart(); }, OpenLevels);
+        hud.ShowPause(world.HasGolf ? "Restart hole" : "Restart puzzle", CloseMenus, () => { CloseMenus(); Restart(); }, OpenLevels,
+                      $"Graphics: {S3Graphics.Name(S3Graphics.Current)}", ToggleGraphics);
     }
 
     void OpenLevels()
@@ -607,6 +621,7 @@ public class S3Golf : MonoBehaviour
     void Update()
     {
         if (world == null) return;
+        if (Keyboard.current != null && Keyboard.current.gKey.wasPressedThisFrame) ToggleGraphics();
         if (titleUp) { UpdateTitle(); return; }
         if (replay != null && replay.Active) { UpdateReplay(); return; }   // it takes the whole screen; nothing else moves
         var keys = Keyboard.current;

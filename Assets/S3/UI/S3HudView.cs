@@ -521,11 +521,11 @@ public class S3HudView : MonoBehaviour
         ("GOLF", new[] { ("A D", "Aim"), ("W S", "Launch height"), ("Shift", "Fine aim"), ("Space", "Power, then shoot"), ("RMB", "Cancel"), ("C", "Level the view") }),
         ("YOUR BALL", new[] { ("Tab", "Walk around"), ("F", "Back to the ball"), ("B", "Replay last spot (+1)"), ("R", "Restart hole"), ("N", "Start over") }),
         ("LASER PUZZLES", new[] { ("LMB", "Place or pick up"), ("Q E", "Turn piece"), ("1 2", "Switch piece"), ("H", "Puzzle hint") }),
-        ("WALKING", new[] { ("W A S D", "Walk"), ("Shift", "Run"), ("Space", "Jump"), ("M", "Next map") }),
+        ("WALKING", new[] { ("W A S D", "Walk"), ("Shift", "Run"), ("Space", "Jump"), ("M", "Next map"), ("G", "Graphics mode") }),
     };
 
     /// <summary>The pause menu: resume / restart / levels on the left, the controls on the right.</summary>
-    public void ShowPause(string restartLabel, Action resume, Action restart, Action levels)
+    public void ShowPause(string restartLabel, Action resume, Action restart, Action levels, string graphicsLabel, Action toggleGraphics)
     {
         var layer = OpenMenu(Menu.Pause);
         var box = With(new VisualElement(), "pause");
@@ -534,6 +534,7 @@ public class S3HudView : MonoBehaviour
         left.Add(MenuButton("Resume", "Esc", true, resume));
         left.Add(MenuButton(restartLabel, "R", false, restart));
         left.Add(MenuButton("Level select", "L", false, levels));
+        left.Add(MenuButton(graphicsLabel, "G", false, toggleGraphics));
         box.Add(left);
 
         var controls = With(new FacetPanel(), "controls");
