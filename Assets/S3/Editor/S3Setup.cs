@@ -93,7 +93,7 @@ public static class S3Setup
     /// Graphics and performance settings for the open S3 scene:
     ///   * a global post-processing volume with one profile per map (bloom, neutral tonemapping,
     ///     grading, vignette; all effects that don't read depth, which isn't Euclidean here),
-    ///   * 4x MSAA (PC) plus SMAA on the camera,
+    ///   * 4x MSAA on PC (no SMAA: it only blurs on top), render scale 1.5,
     ///   * no camera depth / opaque texture copies (nothing reads them; they cost two passes a frame).
     /// </summary>
     [MenuItem("S3/Setup Graphics")]
@@ -108,6 +108,7 @@ public static class S3Setup
             rp.supportsCameraOpaqueTexture = false;
             // 4x MSAA on PC for the low-poly silhouettes and grass (SMAA on the camera only catches some of it)
             rp.msaaSampleCount = rp.name.Contains("Mobile") ? 1 : 4;
+            if (!rp.name.Contains("Mobile")) rp.renderScale = 1.5f;   // supersampled, on top of MSAA: smoother grass and thin edges
             rp.supportsHDR = true;
             EditorUtility.SetDirty(rp);
         }
@@ -136,8 +137,7 @@ public static class S3Setup
         var data = player.GetComponent<UniversalAdditionalCameraData>();
         if (data == null) data = player.gameObject.AddComponent<UniversalAdditionalCameraData>();
         data.renderPostProcessing = true;
-        data.antialiasing = AntialiasingMode.SubpixelMorphologicalAntiAliasing;
-        data.antialiasingQuality = AntialiasingQuality.High;
+        data.antialiasing = AntialiasingMode.None;   // MSAA (the pipeline asset) handles edges; SMAA on top only blurs
         data.requiresDepthOption = CameraOverrideOption.Off;
         data.requiresColorOption = CameraOverrideOption.Off;
         data.renderShadows = false;
