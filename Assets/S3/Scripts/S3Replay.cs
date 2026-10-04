@@ -65,6 +65,7 @@ public class S3Replay
     static MaterialPropertyBlock block;
     Vector3 axis, side, up;
     float turn, tilt, elapsed, duration;
+    bool showcase;   // the title screen: just the world, turning slowly
 
     /// <summary>
     /// The replay's view of a point of S^3 (must match S3/Replay). Dropping y would put a point h up at cos(h),
@@ -100,8 +101,7 @@ public class S3Replay
         camera.enabled = false;
         var data = camera.GetUniversalAdditionalCameraData();
         data.renderPostProcessing = true;
-        data.antialiasing = AntialiasingMode.SubpixelMorphologicalAntiAliasing;
-        data.antialiasingQuality = AntialiasingQuality.High;
+        data.antialiasing = AntialiasingMode.None;   // MSAA (the pipeline asset) handles edges; SMAA on top only blurs
 
         Color shellTint = world.biome == S3World.Biome.Basin ? new Color(0.78f, 0.86f, 0.95f)
                         : world.biome == S3World.Biome.Desert ? new Color(0.86f, 0.70f, 0.52f) : new Color(0.42f, 0.68f, 0.40f);
@@ -222,6 +222,41 @@ public class S3Replay
         SetMarker(cup, ToBall(cupPoint), 0.022f);
         fence.GetComponent<MeshFilter>().sharedMesh = fenceMesh;
         fence.enabled = fenceMesh;
+        showcase = false;
+        ball.enabled = true;
+        Shader.SetGlobalVector("_ReplayLight", Light);
+        Active = true;
+        camera.enabled = true;
+        mainCamera.enabled = false;
+        Update(0, Vector2.zero);
+    }
+
+    /// <summary>
+    /// The title screen's backdrop: the whole world as the glass ball, with the first hole's flag in it, turning
+    /// slowly. Nothing plays; there is no ball or path.
+    /// </summary>
+    public void BeginShowcase(Vector4 cupPoint, Matrix4x4 flagFrame)
+    {
+        track.Clear();
+        starts.Clear();
+        ends.Clear();
+        track.Add(cupPoint);
+        track.Add(cupPoint);
+        Vector3 c = ToBall(cupPoint).normalized;
+        up = -c;
+        axis = Vector3.Cross(c, Mathf.Abs(c.y) < 0.9f ? Vector3.up : Vector3.right).normalized;
+        side = Vector3.Cross(up, axis);
+        turn = 0;
+        tilt = 30;
+        elapsed = 0;
+        duration = Sample;
+        Age = 0;
+        showcase = true;
+        BuildTrail();   // no shots: empty
+        S3World.SetFrame(flag, flagFrame);
+        SetMarker(cup, ToBall(cupPoint), 0.022f);
+        fence.enabled = false;
+        ball.enabled = false;
         Shader.SetGlobalVector("_ReplayLight", Light);
         Active = true;
         camera.enabled = true;
@@ -233,6 +268,8 @@ public class S3Replay
     {
         if (!Active) return;
         Active = false;
+        showcase = false;
+        if (ball) ball.enabled = true;
         if (camera) camera.enabled = false;
         if (mainCamera) mainCamera.enabled = true;
     }
@@ -244,7 +281,7 @@ public class S3Replay
         Age += dt;
         elapsed += dt * Speed;
         if (elapsed > duration + Tail * Speed) elapsed = 0;
-        turn -= mouse.x * Look;
+        turn -= mouse.x * Look + (showcase ? 7f * dt : 0);   // the title screen turns by itself
         tilt = Mathf.Clamp(tilt + mouse.y * Look, -MaxTilt, MaxTilt);
 
         float t = turn * Mathf.Deg2Rad, l = tilt * Mathf.Deg2Rad;

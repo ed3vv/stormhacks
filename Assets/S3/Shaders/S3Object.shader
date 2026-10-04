@@ -160,8 +160,9 @@ Shader "S3/Object"
             float3 lush = float3(0.27, 0.50, 0.20), dry = float3(0.50, 0.62, 0.29);
             float3 grass = lerp(lush, dry, smoothstep(0.3, 0.8, n1 * 0.6 + n0 * 0.4));
             grass *= 0.82 + 0.2 * n2 + 0.1 * n3;
+            // the blade grain fades out where a pixel spans more than its pattern, so distant grass doesn't shimmer
             float grain = Noise(g * 14.0);
-            grass *= 0.95 + 0.08 * grain;
+            grass *= 1 + 0.08 * (grain - 0.5) * saturate(1.5 - length(fwidth(g)) * 14.0);
             // clover and wildflowers: little round specks in clumps, fading out with distance before they shimmer
             float3 cell = floor(g * 4.0);
             float pick = Hash(cell + 5.3);

@@ -10,7 +10,7 @@ using UnityEngine;
 ///   * win + the crowd: a hole sunk (cheering under par, clapping at par, slow clapping over par),
 ///     a Desert puzzle solved or an Eternal Poles cup's ice gate opened by the laser (clapping)
 ///   * lose + boos: the ball went over or past the cup and carried on
-///   * music: loops quietly, ducking under the jingles and the crowd
+///   * music: loops underneath everything, dipping a little under the jingles and the crowd
 ///
 /// The static calls do nothing outside Play mode (the capture tool drives the game in edit mode).
 /// </summary>
@@ -33,16 +33,18 @@ public class S3Audio : MonoBehaviour
     public AudioClip boo;         // a miss
 
     [Header("Volume")]
-    [Range(0, 1)] public float sfxVolume = 0.8f;
+    [Range(0, 1)] public float sfxVolume = 0.55f;
     [Tooltip("Extra level for the club hit, on top of sfxVolume.")]
     [Range(0, 1)] public float hitVolume = 0.65f;
-    [Range(0, 1)] public float jingleVolume = 0.9f;
+    [Tooltip("Extra level for the ball landing, on top of sfxVolume (its clip is mastered ~16 dB hotter than the others).")]
+    [Range(0, 1)] public float landVolume = 0.4f;
+    [Range(0, 1)] public float jingleVolume = 0.65f;
     [Tooltip("Extra level for the win jingle, on top of jingleVolume.")]
     [Range(0, 1)] public float winVolume = 0.45f;
-    [Range(0, 1)] public float crowdVolume = 0.8f;
-    [Range(0, 1)] public float musicVolume = 0.3f;
+    [Range(0, 1)] public float crowdVolume = 0.45f;
+    [Range(0, 1)] public float musicVolume = 1f;
     [Tooltip("Music level while a jingle plays, as a fraction of musicVolume.")]
-    [Range(0, 1)] public float musicDuck = 0.3f;
+    [Range(0, 1)] public float musicDuck = 0.6f;
 
     [Header("Ball impacts")]
     [Tooltip("Impacts slower than this (m/s) are silent.")]
@@ -130,7 +132,7 @@ public class S3Audio : MonoBehaviour
         var a = Active;
         if (!a || speed < a.minImpact || Time.time - a.lastLand < 0.08f) return;
         a.lastLand = Time.time;
-        a.OneShot(a.land, Mathf.Lerp(0.25f, 1f, Mathf.InverseLerp(a.minImpact, a.loudImpact, speed)));
+        a.OneShot(a.land, a.landVolume * Mathf.Lerp(0.25f, 1f, Mathf.InverseLerp(a.minImpact, a.loudImpact, speed)));
     }
 
     public static void Click()

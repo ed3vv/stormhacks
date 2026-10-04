@@ -104,6 +104,10 @@ public class S3Golf : MonoBehaviour
     public float glideArc = 0.25f;
     public float glideMaxArc = 6f;
 
+    [Header("Title screen")]
+    [Tooltip("Open on the title screen (the world turning as a glass ball, Play / Level select).")]
+    public bool showTitle = true;
+
     [Header("Sinking it")]
     [Tooltip("Seconds after the ball drops before the card with Replay and Next comes up.")]
     public float resultDelay = 1.2f;
@@ -185,7 +189,54 @@ public class S3Golf : MonoBehaviour
     S3World.Hole Hole => world.holes[holeIndex];
     float R => world.radius;
 
-    void Start() => Init();
+    bool titleUp;   // the title screen is showing
+
+    void Start()
+    {
+        Init();
+        if (showTitle && Application.isPlaying) ShowTitle();
+    }
+
+    // ------------------------------------------------------------------ title screen
+
+    /// <summary>The title over the world turning as a glass ball (the replay camera's view, showing the first green).</summary>
+    void ShowTitle()
+    {
+        titleUp = true;
+        PauseForMenu();
+        if (replay != null && ball != null) replay.BeginShowcase(Hole.cup, flagFrame);
+        hud.ShowTitle(StartFromTitle, OpenLevels);
+    }
+
+    void EndTitle()
+    {
+        if (!titleUp) return;
+        titleUp = false;
+        replay?.End();
+    }
+
+    /// <summary>Play: the first hole (or puzzle) from the start, intro banner and all.</summary>
+    void StartFromTitle()
+    {
+        EndTitle();
+        CloseMenus();
+        if (world.HasGolf) StartHole(holeIndex);
+        else StartPuzzle(puzzleIndex);
+    }
+
+    void UpdateTitle()
+    {
+        replay?.Update(Time.deltaTime, Vector2.zero);
+        var kb = Keyboard.current;
+        if (kb == null) return;
+        if (hud.Current == S3HudView.Menu.Levels)
+        {
+            if (kb.lKey.wasPressedThisFrame || kb.escapeKey.wasPressedThisFrame) CloseMenus();   // back to the title
+            return;
+        }
+        if (kb.enterKey.wasPressedThisFrame || kb.numpadEnterKey.wasPressedThisFrame || kb.spaceKey.wasPressedThisFrame) StartFromTitle();
+        else if (kb.lKey.wasPressedThisFrame) OpenLevels();
+    }
 
     /// <summary>Creates the ball, flag and aim helpers and starts hole 1 (also used by the capture tool).</summary>
     public void Init()
@@ -352,6 +403,7 @@ public class S3Golf : MonoBehaviour
     void CloseMenus()
     {
         hud.CloseMenu();
+        if (titleUp) { hud.ShowTitle(StartFromTitle, OpenLevels); return; }
         if (ball != null && state == State.Sunk && resultShown) { ShowResult(); return; }
         player.paused = false;
         Cursor.lockState = CursorLockMode.Locked;
@@ -411,6 +463,7 @@ public class S3Golf : MonoBehaviour
     /// <summary>Start a given hole (or Desert puzzle) on a map, from scratch.</summary>
     void JumpTo(S3World.Biome b, int index)
     {
+        EndTitle();
         CloseMenus();
         if (b != world.biome) { world.SetBiome(b); Init(); }   // rebuilding clears the old map's renderers
         advancing = false;
@@ -554,6 +607,7 @@ public class S3Golf : MonoBehaviour
     void Update()
     {
         if (world == null) return;
+        if (titleUp) { UpdateTitle(); return; }
         if (replay != null && replay.Active) { UpdateReplay(); return; }   // it takes the whole screen; nothing else moves
         var keys = Keyboard.current;
         if (keys != null)
@@ -1299,9 +1353,9 @@ public class S3Golf : MonoBehaviour
     void LateUpdate()
     {
         if (world == null || hud == null || (ball == null && puzzle == null)) return;
-        bool replaying = replay != null && replay.Active;
+        bool replaying = replay != null && replay.Active && !titleUp;
         hud.SetReplay(replaying, replaying ? ReplayLine() : null, replaying ? replay.Progress : 0);
-        bool covered = replaying || MenuOpen || hud.Current == S3HudView.Menu.Results || hud.Current == S3HudView.Menu.HoleDone;
+        bool covered = replaying || titleUp || MenuOpen || hud.Current == S3HudView.Menu.Results || hud.Current == S3HudView.Menu.HoleDone;
         hud.SetHudVisible(!covered);
         if (covered) return;
         bool mouseFree = Cursor.lockState != CursorLockMode.Locked;

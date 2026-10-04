@@ -1029,3 +1029,74 @@
     border-radius: 4px;
     background-color: var(--gold);
 }
+
+/* ------------------------------------------------------------ title screen */
+
+.menu-layer--title {
+    background-color: rgba(9, 11, 20, 0.2);
+}
+
+.title-screen {
+    align-items: center;
+    opacity: 0;
+    translate: 0 -40px;
+    transition-duration: 0.6s;
+    transition-timing-function: ease-out-back;
+}
+
+.title-screen--in {
+    opacity: 1;
+    translate: 0 0;
+}
+
+.title-eyebrow {
+    font-size: 18px;
+    letter-spacing: 7px;
+    color: var(--paper);
+    text-shadow: 0px 3px 0px rgb(14, 18, 32);
+    margin-bottom: 20px;
+}
+
+.title-ribbon {
+    padding: 22px 130px 34px;
+    --fill: #FFC23D;
+    --light: #FFD86E;
+    --depth-color: #8A5A00;
+    --depth: 12;
+}
+
+.title-row {
+    justify-content: center;
+}
+
+.title-name {
+    font-size: 150px;
+    color: var(--ink);
+    margin: 0 34px;
+}
+
+.title-ring {
+    width: 54px;
+    height: 54px;
+    --fill: #1B2033;
+    --depth-color: #8A5A00;
+}
+
+.title-tagline {
+    font-size: 22px;
+    max-width: 760px;
+    white-space: normal;
+    -unity-text-align: middle-center;
+    margin-top: 34px;
+    text-shadow: 0px 2px 0px rgb(14, 18, 32);
+}
+
+.title-buttons {
+    flex-direction: row;
+    margin-top: 40px;
+}
+
+.title-buttons .menu-button {
+    min-width: 280px;
+    margin: 0 10px;
+}

@@ -208,7 +208,7 @@ MonoBehaviour:
   m_VolumeTrigger: {fileID: 0}
   m_VolumeFrameworkUpdateModeOption: 2
   m_RenderPostProcessing: 1
-  m_Antialiasing: 2
+  m_Antialiasing: 0
   m_AntialiasingQuality: 2
   m_StopNaN: 0
   m_Dithering: 0
@@ -383,6 +383,7 @@ MonoBehaviour:
   restitution: 0.38
   bounceGrip: 0.9
   airDrag: 0.035
+  shotSpeed: 1.2
   minAngle: 2
   maxAngle: 90
   startAngle: 24
@@ -390,14 +391,33 @@ MonoBehaviour:
   heightDegreesPerSecond: 35
   fineAimFactor: 0.25
   powerCycleRate: 3.2
+  autoAimOffsetMin: 4
+  autoAimOffsetMax: 12
   reach: 2.5
   cameraBack: 3.6
   cameraHeight: 1.9
+  lowHeight: 0.7
+  lowBack: 3.5
+  lowBackPerMetre: 0.45
+  lowMaxBack: 8
+  lowSideAngle: 25
+  lowFollowRate: 4
+  headingRate: 2.5
+  highShotHeight: 12
+  highShotBlend: 0.5
   leash: 4.1
   followMinHeight: 1
-  followTriggerHeight: 1
   lookRate: 5
   settleTime: 0.7
+  glideDelay: 0.6
+  glideMinTime: 0.8
+  glideSecondsPerMetre: 0.04
+  glideMaxTime: 2.2
+  glideArc: 0.25
+  glideMaxArc: 6
+  showTitle: 1
+  resultDelay: 1.2
+  replayMinDistance: 0
   missRadius: 1.5
 --- !u!114 &2128898969
 MonoBehaviour:
@@ -463,6 +483,16 @@ MonoBehaviour:
   - tee: {x: 2.7, y: -6.7}
     cup: {x: -19, y: 12.1}
     par: 4
+  meadowFences:
+  - hole: 1
+    radius: 4.4
+    halfSpan: 115
+  - hole: 3
+    radius: 4.4
+    halfSpan: 115
+  - hole: 4
+    radius: 4.4
+    halfSpan: 115
   cupRadius: 0.18
   greenRadius: 3.5
   puzzleFrame: {x: 0, y: 0, z: 0}
@@ -562,13 +592,14 @@ MonoBehaviour:
   clapping: {fileID: 8300000, guid: f52033251edbf2546a834209ee23836e, type: 3}
   slowClap: {fileID: 8300000, guid: 8a167118b2e6d994e89ea7888163650b, type: 3}
   boo: {fileID: 8300000, guid: e044f264769780e4683ab49f753b367d, type: 3}
-  sfxVolume: 0.8
+  sfxVolume: 0.55
   hitVolume: 0.65
-  jingleVolume: 0.9
+  landVolume: 0.4
+  jingleVolume: 0.65
   winVolume: 0.45
-  crowdVolume: 0.8
-  musicVolume: 0.3
-  musicDuck: 0.3
+  crowdVolume: 0.45
+  musicVolume: 1
+  musicDuck: 0.6
   minImpact: 1
   loudImpact: 10
 --- !u!1660057539 &9223372036854775807

@@ -10,7 +10,7 @@ using UnityEngine.UIElements;
 /// </summary>
 public class S3HudView : MonoBehaviour
 {
-    public enum Menu { None, Pause, Levels, Results, HoleDone }
+    public enum Menu { None, Pause, Levels, Results, HoleDone, Title }
     public enum MarkerKind { Cup, Gem, Pole, Ball }
 
     public struct LevelEntry
@@ -430,6 +430,7 @@ public class S3HudView : MonoBehaviour
         Current = which;
         menuLayer.Clear();
         menuLayer.EnableInClassList("menu-layer--light", which == Menu.HoleDone);
+        menuLayer.EnableInClassList("menu-layer--title", which == Menu.Title);
         Show(menuLayer, true);
         HideBanner();
         return menuLayer;
@@ -573,6 +574,31 @@ public class S3HudView : MonoBehaviour
         card.Add(row);
         layer.Add(card);
         card.schedule.Execute(() => card.AddToClassList("hole-card--in")).StartingIn(30);
+    }
+
+    /// <summary>
+    /// The title screen, over the world turning as a glass ball: "Antipode" on the big gold ribbon, flanked by
+    /// the pole rings (the marker for a shot's antipode), a tagline, then Play and Level select.
+    /// </summary>
+    public void ShowTitle(Action play, Action levels)
+    {
+        var layer = OpenMenu(Menu.Title);
+        var box = With(new VisualElement(), "title-screen");
+        box.Add(L("MINI GOLF ON A THREE-SPHERE", "eyebrow title-eyebrow"));
+        var ribbon = With(new Ribbon(), "title-ribbon");
+        var row = With(new VisualElement(), "row title-row");
+        row.Add(With(new ShapeIcon(S3Shape.Ring), "title-ring"));
+        row.Add(L("Antipode", "display title-name"));
+        row.Add(With(new ShapeIcon(S3Shape.Ring), "title-ring"));
+        ribbon.Add(row);
+        box.Add(ribbon);
+        box.Add(L("Every straight line comes back around. Hit it high enough and it lands on the far side of the world.", "title-tagline"));
+        var buttons = With(new VisualElement(), "title-buttons");
+        buttons.Add(MenuButton("Play", "Enter", true, play));
+        buttons.Add(MenuButton("Level select", "L", false, levels));
+        box.Add(buttons);
+        layer.Add(box);
+        box.schedule.Execute(() => box.AddToClassList("title-screen--in")).StartingIn(30);
     }
 
     /// <summary>End of a map: a golf scorecard, hole by hole, with the total against par.</summary>
