@@ -22,6 +22,10 @@ body { font-family: ui-monospace, SFMono-Regular, Menlo, monospace; color: #fff;
 #meter-fill { height: 100%; width: 0; background: #4ce54c; }
 #meter-pole { position: absolute; top: -2px; bottom: -2px; width: 2px; background: rgb(255 255 255 / 85%); }
 
+#replay { position: absolute; left: 0; right: 0; top: 26px; text-align: center; }
+#replay-title { font-size: 26px; font-weight: 700; letter-spacing: .22em; }
+#replay-note { margin-top: 4px; font-size: 15px; opacity: .85; }
+
 #error { position: fixed; inset: 20px; padding: 20px; background: #300; color: #fff; white-space: pre-wrap; }
 #menu { position: fixed; inset: 0; z-index: 10; display: flex; flex-direction: column; align-items: center; justify-content: center; gap: 36px; padding: 16px; text-align: center; background: radial-gradient(circle at 50% 40%, #24356b, #070912 70%); }
 #menu[hidden], #menu [hidden] { display: none; }

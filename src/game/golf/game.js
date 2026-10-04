@@ -29,6 +29,37 @@ const LEASH = 4.5;                 // the flight camera trails the ball at most 
 const FOLLOW_MIN_HEIGHT = 1.2;
 const FOLLOW_TRIGGER_HEIGHT = 2.5; // only shots that climb this high take the camera
 const POLE_HEIGHT = 0.5 * Math.PI * R;
+const REPLAY_MIN_DISTANCE = 10;    // metres: shorter putts are not worth replaying
+const REPLAY_SPEED = 0.5;          // half speed
+const REPLAY_SAMPLE = 1 / 60;      // seconds of flight between recorded samples
+const REPLAY_TAIL = 1;             // seconds held on the last frame before it runs again
+const REPLAY_EYE_DISTANCE = 3.1;   // the world has radius 1 in the replay's own coordinates
+const REPLAY_EYE_TILT = 22;         // degrees the replay camera starts above level with the cup's horizon
+const REPLAY_LOOK = 0.25;          // degrees the replay camera orbits per pixel of mouse
+const REPLAY_MAX_TILT = 85;        // short of straight above or below, where its up would vanish
+
+/**
+ * The replay's view of a point of S^3. The ground is the great 2-sphere y = 0, so dropping y
+ * leaves a plain unit 2-sphere, and a point h radians up sits over the same ground point, pulled
+ * in towards the centre. The playable hemisphere therefore becomes a solid unit ball - ground on
+ * the outside, the pole at the very centre - which is what makes the whole flight visible from
+ * outside at once.
+ *
+ * How far in is depth(h), and it must match the replay vertex shader. Merely dropping y would put
+ * the point cos(h) out, which is flat at the ground: a house would be as wide as ever but paper
+ * thin. This depth instead falls one for one with height at the ground, so things keep their
+ * true proportions there, and still reaches the centre at the pole, a quarter lap up.
+ */
+const REPLAY_BEND = (Math.PI / 2 - 1) / (Math.PI / 2) ** 2;
+const toBall = p => {
+  const out = Math.hypot(p[0], p[2], p[3]);
+  if (out < 1e-9) return [0, 0, 0];
+  const h = Math.atan2(p[1], out), k = (1 - h + REPLAY_BEND * h * h) / out;
+  return [p[0] * k, p[2] * k, p[3] * k];
+};
+
+const cross3 = (a, b) => [a[1] * b[2] - a[2] * b[1], a[2] * b[0] - a[0] * b[2], a[0] * b[1] - a[1] * b[0]];
+const unit3 = v => { const l = Math.hypot(...v); return l > 1e-9 ? v.map(c => c / l) : null; };
 
 const lerp = (a, b, t) => a + (b - a) * clamp(t, 0, 1);
 const inverseLerp = (a, b, v) => clamp((v - a) / (b - a), 0, 1);
@@ -52,6 +83,8 @@ export function createGolfGame(canvas) {
   let followWeight = 0, camPosition = null, camUp = null, camForward = null;
   let flagFrame = null;
   let clock = 0, message = '', messageUntil = 0;
+  let track = [], sinceSample = 0;                 // the flight being recorded, for the replay
+  let replay = null;
 
   const hole = () => HOLES[holeIndex];
   const nearBall = () => groundDistance(player.foot, ball.foot) < REACH;
@@ -84,6 +117,7 @@ export function createGolfGame(canvas) {
   }
 
   function startHole(index) {
+    replay = null;
     holeIndex = index;
     strokes = 0; aimAngle = START_ANGLE; followWeight = 0;
     ball.place(hole().tee);
@@ -135,6 +169,8 @@ export function createGolfGame(canvas) {
 
   function shoot(p) {
     lastShot = ball.foot;
+    track = [[...ball.position]];
+    sinceSample = 0;
     ball.launch(shotDirection(), launchSpeed(p), aimAngle * Math.PI / 180);
     strokes++; total++;
     state = 'moving';
@@ -150,6 +186,8 @@ export function createGolfGame(canvas) {
       ball.step(STEP, ROLL_FRICTION, obstacles);
       shotMaxHeight = Math.max(shotMaxHeight, ball.heightM - BALL_RADIUS);
       groundedTime = ball.grounded ? groundedTime + STEP : 0;
+      sinceSample += STEP;
+      if (sinceSample >= REPLAY_SAMPLE) { sinceSample -= REPLAY_SAMPLE; track.push([...ball.position]); }
 
       // the cup takes the ball whenever it rolls or lands in it; there is no lip-out
       const toCup = distance(ball.foot, hole().cup) * R;
@@ -160,6 +198,8 @@ export function createGolfGame(canvas) {
         const name = strokes === 1 ? 'HOLE IN ONE!'
           : over <= -2 ? 'Eagle!' : over === -1 ? 'Birdie!' : over === 0 ? 'Par' : over === 1 ? 'Bogey' : `+${over}`;
         say(`${name}\nSunk in ${strokes}`, 3);
+        const length = groundDistance(lastShot, ball.foot);
+        if (length > REPLAY_MIN_DISTANCE && track.length > 1) startReplay(length);
         return;
       }
       if (ball.grounded && ball.speed < 0.05) {
@@ -171,6 +211,73 @@ export function createGolfGame(canvas) {
       }
     }
     if (moveTime > 40) { ball.velocity = [0, 0, 0, 0]; state = 'ready'; }
+  }
+
+  // ------------------------------------------------------------------ instant replay
+
+  /**
+   * Watch the shot again from outside the world. In the replay's coordinates the whole of S^3
+   * that you can stand in is a solid unit ball: the ground is its surface and height above the
+   * ground is depth towards the centre. The camera sits off the ball, far enough to take all of
+   * it in, and starts with the cup at the bottom of the frame - the mouse orbits it from there; the shell is drawn
+   * as glass so the flight inside stays visible - a drive over the pole is seen passing clean
+   * through the middle of the world.
+   */
+  function startReplay(length) {
+    const from = toBall(track[0]), cup = unit3(toBall(hole().cup));
+    // the cup hangs straight down, so every replay is framed the same way whatever the hole
+    const up = cup.map(c => -c);
+    // and the camera looks along the normal of the shot's plane, which shows the arc face on
+    // rather than edge on and is square to that "down" by construction
+    const normal = cross3(from, cup);
+    // a shot straight to the antipode leaves the plane undefined: any direction level with the
+    // cup will do, so take one from whichever world axis is least aligned with it
+    const axis = Math.hypot(...normal) > 0.05
+      ? unit3(normal)
+      : unit3(cross3(cup, Math.abs(cup[1]) < 0.9 ? [0, 1, 0] : [1, 0, 0]));
+    // it starts lifted a little above that level, looking slightly down on the world with the
+    // cup still low, and the mouse orbits it around the world from there
+    replay = {
+      axis, side: cross3(up, axis), up, length,
+      turn: 0, tilt: REPLAY_EYE_TILT,
+      elapsed: 0, duration: (track.length - 1) * REPLAY_SAMPLE,
+    };
+    renderer.uploadTrail(track.map(toBall));
+    state = 'replay';
+  }
+
+  function advanceReplay(dt) {
+    // it runs again and again, a beat after the ball drops, until a click moves on
+    if (input.clicked) { replay = null; advanceHole(); return; }
+    replay.elapsed += dt * REPLAY_SPEED;
+    if (replay.elapsed > replay.duration + REPLAY_TAIL * REPLAY_SPEED) replay.elapsed = 0;
+    if (input.locked) {
+      replay.turn -= input.mouseX * REPLAY_LOOK;
+      replay.tilt = clamp(replay.tilt - input.mouseY * REPLAY_LOOK, -REPLAY_MAX_TILT, REPLAY_MAX_TILT);
+    }
+  }
+
+  function replayEye() {
+    const turn = replay.turn * Math.PI / 180, tilt = replay.tilt * Math.PI / 180;
+    const level = replay.axis.map((c, i) => c * Math.cos(turn) + replay.side[i] * Math.sin(turn));
+    return level.map((c, i) => (c * Math.cos(tilt) + replay.up[i] * Math.sin(tilt)) * REPLAY_EYE_DISTANCE);
+  }
+
+  function replayScene() {
+    const progress = clamp(replay.elapsed / Math.max(replay.duration, 1e-6), 0, 1);
+    const position = progress * (track.length - 1);
+    const first = Math.floor(position), second = Math.min(first + 1, track.length - 1);
+    const blend = position - first;
+    const here = mix(track[first], track[second], blend);
+    return {
+      eye: replayEye(),
+      up: replay.up,
+      ball: toBall(here),
+      cup: toBall(hole().cup),
+      flag: flagFrame,
+      drawnSamples: second + 1,
+      progress,
+    };
   }
 
   // ------------------------------------------------------------------ flight camera
@@ -202,8 +309,8 @@ export function createGolfGame(canvas) {
       camPosition = lift(walk(base, scale(directionTo(base, o.foot), -1), (clearance - gap) / R), h / R);
     }
 
-    const toBall = directionTo(camPosition, ball.position);
-    camForward = isZero(toBall) ? ortho(camForward, camPosition) : toBall;
+    const toward = directionTo(camPosition, ball.position);
+    camForward = isZero(toward) ? ortho(camForward, camPosition) : toward;
 
     let previousUp = ortho(camUp, camPosition, camForward);
     if (isZero(previousUp)) previousUp = column(frameAt(camPosition, camUp, camForward), 1);
@@ -243,6 +350,9 @@ export function createGolfGame(canvas) {
   }
 
   function step(dt) {
+    // the replay takes the whole screen; nothing in the world moves while it runs
+    if (state === 'replay') { advanceReplay(dt); return; }
+
     if (input.pressed('KeyR') && state !== 'sunk') standAtBall();
     if (input.pressed('KeyB') && (state === 'ready' || state === 'moving') && strokes > 0) {
       ball.place(lastShot);
@@ -262,15 +372,17 @@ export function createGolfGame(canvas) {
     else if (state === 'moving') simulate(dt);
     else if (state === 'sunk') {
       sunkTimer -= dt;
-      if (sunkTimer <= 0) {
-        if (holeIndex + 1 < HOLES.length) startHole(holeIndex + 1);
-        else {
-          state = 'finished';
-          say(`Course complete!  ${total} strokes (par ${TOTAL_PAR}).\nPress N to play again.`, 1e6);
-        }
-      }
+      if (sunkTimer <= 0) advanceHole();
     }
     updateFollow(dt);
+  }
+
+  function advanceHole() {
+    if (holeIndex + 1 < HOLES.length) startHole(holeIndex + 1);
+    else {
+      state = 'finished';
+      say(`Course complete!  ${total} strokes (par ${TOTAL_PAR}).\nPress N to play again.`, 1e6);
+    }
   }
 
   function scene() {
@@ -295,7 +407,7 @@ export function createGolfGame(canvas) {
     last = now;
     clock += dt;
     step(dt);
-    renderer.draw(scene());
+    if (state === 'replay') renderer.drawReplay(replayScene()); else renderer.draw(scene());
     input.endFrame();
     frames++;
 
@@ -304,6 +416,7 @@ export function createGolfGame(canvas) {
       pin: groundDistance(ball.foot, hole().cup), pole: POLE_HEIGHT,
       hint: hint(), message: clock < messageUntil ? message : '',
       aiming, aimAngle, charging, power, shotSpeed: launchSpeed(power), poleMark: poleCrossingPower(),
+      replay: replay && { length: replay.length },
     });
     if (now - statsTime >= 250) { hud.setFps(frames, now - statsTime); statsTime = now; frames = 0; }
     animationFrame = requestAnimationFrame(frame);

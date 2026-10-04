@@ -72,3 +72,70 @@ void main(){
  col=mix(col,haze.rgb,haze.a*smoothstep(.45*3.14159265,3.14159265,away));
  outColor=vec4(col,1);
 }`;
+
+// ---------------------------------------------------------------- the replay view
+//
+// The same world seen from outside, as a glass ball. The ground is the great 2-sphere y = 0, so
+// its points are (x, 0, z, w) with x^2 + z^2 + w^2 = 1: dropping y leaves a plain unit 2-sphere
+// in R^3. A point h radians above the ground is cos(h) * ground + sin(h) * e_y, so its (x, z, w)
+// part points at the ground beneath it. Placing it along that direction, nearer the centre the
+// higher it is, carries the whole playable hemisphere onto the solid unit ball: the ground becomes
+// its surface, height above ground becomes depth towards the centre, and the pole - a quarter lap
+// straight up - is the centre itself. A drive that crosses the pole is seen passing clean through
+// the middle of the world.
+//
+// The (x, z, w) part is itself cos(h) long, but using that as the depth squashes everything near
+// the ground flat (1 - cos(h) is only h^2 / 2). The depth used instead is 1 - h + b * h^2 with b
+// chosen to reach 0 at the pole: one for one with height at the ground, so houses and trees keep
+// their true proportions and stand up off the surface. toBall in game.js is the same map.
+//
+// That picture is Euclidean, so from here on it is an ordinary perspective camera.
+export const replayVertexShader = `#version 300 es
+precision highp float;
+in vec4 position;
+in vec3 color;
+uniform mat4 model;              // SO(4) placement, for geometry given as points of S^3
+uniform mat4 viewProjection;
+uniform float fromS3;            // 1: project a point of S^3; 0: position.xyz is already in R^3
+uniform vec3 markerOffset;
+uniform float markerScale;
+const float BEND=(1.5707963-1.)/(1.5707963*1.5707963);
+out vec3 vColor;
+out vec3 vWorld;
+void main(){
+ vec3 q;
+ if(fromS3>.5){
+  vec4 p=model*position;
+  vec3 g=vec3(p.x,p.z,p.w);
+  float l=length(g),h=atan(p.y,l);
+  q=l>1e-6?g/l*(1.-h+BEND*h*h):vec3(0);
+ }
+ else q=markerOffset+position.xyz*markerScale;
+ vColor=color;vWorld=q;
+ gl_Position=viewProjection*vec4(q,1);
+}`;
+
+export const replayFragmentShader = `#version 300 es
+precision highp float;
+in vec3 vColor;
+in vec3 vWorld;
+out vec4 outColor;
+uniform vec3 cameraPosition,lightDirection,tint;
+uniform float shell,alpha,ambient;
+void main(){
+ // the shell is a smooth sphere, so its normal is radial; everything else is flat-shaded, and
+ // screen-space derivatives give the true facet normal of the projected geometry for free
+ // a line has no facet at all (the trail), so it simply faces the eye
+ vec3 toEye=normalize(cameraPosition-vWorld);
+ vec3 facet=cross(dFdx(vWorld),dFdy(vWorld));
+ vec3 n=shell>.5?normalize(vWorld):dot(facet,facet)>0.?normalize(facet):toEye;
+ if(dot(n,toEye)<0.)n=-n;
+ vec3 col=vColor*tint*(ambient+(1.-ambient)*max(dot(n,lightDirection),0.));
+ float a=alpha;
+ if(shell>.5){
+  float rim=pow(1.-abs(dot(n,toEye)),2.5);          // glass: edge-on is bright and opaque
+  col=mix(col,vec3(.85,.94,1.),rim*.7);
+  a=alpha+(1.-alpha)*rim*.8;
+ }
+ outColor=vec4(col,a);
+}`;

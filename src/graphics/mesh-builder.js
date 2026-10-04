@@ -13,6 +13,38 @@ const lerp3 = (a, b, t) => [a[0] + (b[0] - a[0]) * t, a[1] + (b[1] - a[1]) * t, 
 const dist3 = (a, b) => Math.hypot(a[0] - b[0], a[1] - b[1], a[2] - b[2]);
 export const shade = (color, k) => [color[0] * k, color[1] * k, color[2] * k];
 
+/** Unit icosahedron subdivided onto the sphere: shared by every round thing in the game. */
+export function icosahedron(subdivisions) {
+  const t = (1 + Math.sqrt(5)) / 2;
+  const points = [
+    [-1, t, 0], [1, t, 0], [-1, -t, 0], [1, -t, 0], [0, -1, t], [0, 1, t],
+    [0, -1, -t], [0, 1, -t], [t, 0, -1], [t, 0, 1], [-t, 0, -1], [-t, 0, 1],
+  ].map(p => { const l = Math.hypot(...p); return [p[0] / l, p[1] / l, p[2] / l]; });
+  let faces = [
+    0, 11, 5, 0, 5, 1, 0, 1, 7, 0, 7, 10, 0, 10, 11, 1, 5, 9, 5, 11, 4, 11, 10, 2, 10, 7, 6, 7, 1, 8,
+    3, 9, 4, 3, 4, 2, 3, 2, 6, 3, 6, 8, 3, 8, 9, 4, 9, 5, 2, 4, 11, 6, 2, 10, 8, 6, 7, 9, 8, 1,
+  ];
+  for (let s = 0; s < subdivisions; s++) {
+    const mid = new Map();
+    const midpoint = (a, b) => {
+      const key = a < b ? `${a}_${b}` : `${b}_${a}`;
+      if (mid.has(key)) return mid.get(key);
+      const m = [0, 1, 2].map(i => points[a][i] + points[b][i]), l = Math.hypot(...m);
+      points.push([m[0] / l, m[1] / l, m[2] / l]);
+      mid.set(key, points.length - 1);
+      return points.length - 1;
+    };
+    const next = [];
+    for (let f = 0; f < faces.length; f += 3) {
+      const [a, b, c] = [faces[f], faces[f + 1], faces[f + 2]];
+      const ab = midpoint(a, b), bc = midpoint(b, c), ca = midpoint(c, a);
+      next.push(a, ab, ca, b, bc, ab, c, ca, bc, ab, bc, ca);
+    }
+    faces = next;
+  }
+  return { points, faces };
+}
+
 export class MeshBuilder {
   constructor(maxEdge = 0.5) { this.maxEdge = maxEdge; this.verts = []; this.normals = []; this.colors = []; this.tris = []; }
 
@@ -90,33 +122,7 @@ export class MeshBuilder {
 
   /** Low-poly ellipsoid (subdivided icosahedron) with optional radial jitter. */
   icosphere(center, radii, subdivisions, color, random = null, jitter = 0, faceColor = null) {
-    const t = (1 + Math.sqrt(5)) / 2;
-    const points = [
-      [-1, t, 0], [1, t, 0], [-1, -t, 0], [1, -t, 0], [0, -1, t], [0, 1, t],
-      [0, -1, -t], [0, 1, -t], [t, 0, -1], [t, 0, 1], [-t, 0, -1], [-t, 0, 1],
-    ].map(p => { const l = Math.hypot(...p); return [p[0] / l, p[1] / l, p[2] / l]; });
-    let faces = [
-      0, 11, 5, 0, 5, 1, 0, 1, 7, 0, 7, 10, 0, 10, 11, 1, 5, 9, 5, 11, 4, 11, 10, 2, 10, 7, 6, 7, 1, 8,
-      3, 9, 4, 3, 4, 2, 3, 2, 6, 3, 6, 8, 3, 8, 9, 4, 9, 5, 2, 4, 11, 6, 2, 10, 8, 6, 7, 9, 8, 1,
-    ];
-    for (let s = 0; s < subdivisions; s++) {
-      const mid = new Map();
-      const midpoint = (a, b) => {
-        const key = a < b ? `${a}_${b}` : `${b}_${a}`;
-        if (mid.has(key)) return mid.get(key);
-        const m = [0, 1, 2].map(i => (points[a][i] + points[b][i]) / 2), l = Math.hypot(...m);
-        points.push([m[0] / l, m[1] / l, m[2] / l]);
-        mid.set(key, points.length - 1);
-        return points.length - 1;
-      };
-      const next = [];
-      for (let f = 0; f < faces.length; f += 3) {
-        const [a, b, c] = [faces[f], faces[f + 1], faces[f + 2]];
-        const ab = midpoint(a, b), bc = midpoint(b, c), ca = midpoint(c, a);
-        next.push(a, ab, ca, b, bc, ab, c, ca, bc, ab, bc, ca);
-      }
-      faces = next;
-    }
+    const { points, faces } = icosahedron(subdivisions);
     const scaled = points.map(p => {
       const k = 1 + (random ? jitter * (random() * 2 - 1) : 0);
       return [0, 1, 2].map(i => center[i] + p[i] * k * radii[i]);

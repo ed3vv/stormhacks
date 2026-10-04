@@ -2,7 +2,7 @@
 export function createInput(canvas) {
   const held = new Set(), pressed = new Set();
   let deltaX = 0, deltaY = 0;
-  let leftHeld = false, leftPressed = false, leftReleased = false, rightPressed = false;
+  let leftHeld = false, leftPressed = false, leftReleased = false, rightPressed = false, clicked = false;
 
   const onKeyDown = event => {
     if (event.code === 'Space' || event.code.startsWith('Arrow')) event.preventDefault();
@@ -13,6 +13,7 @@ export function createInput(canvas) {
   const onBlur = () => { held.clear(); leftHeld = false; };
 
   const onMouseDown = event => {
+    if (event.button === 0) clicked = true;   // any click on the screen, captured cursor or not
     if (document.pointerLockElement !== canvas) {
       canvas.requestPointerLock?.();      // the click that captures the cursor must not also swing
       return;
@@ -45,13 +46,14 @@ export function createInput(canvas) {
     get leftPressed() { return leftPressed; },
     get leftReleased() { return leftReleased; },
     get rightPressed() { return rightPressed; },
+    get clicked() { return clicked; },
     held: code => held.has(code),
     pressed: code => pressed.has(code),
     /** Clears the one-frame edges. Call once at the end of every frame. */
     endFrame() {
       pressed.clear();
       deltaX = deltaY = 0;
-      leftPressed = leftReleased = rightPressed = false;
+      leftPressed = leftReleased = rightPressed = clicked = false;
     },
     dispose() {
       removeEventListener('keydown', onKeyDown);

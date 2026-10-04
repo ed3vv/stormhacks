@@ -5,7 +5,7 @@
 // resolved prop into triangles. Each prop is authored in plain local metres, placed on the ground
 // great-sphere by a frame, and baked into one shared mesh. The solid ones also report themselves
 // as vertical cylinders, which is what the player and the ball actually collide with.
-import { MeshBuilder, MeshData, bakeLocal, shade } from './mesh-builder.js';
+import { MeshBuilder, MeshData, bakeLocal, icosahedron, shade } from './mesh-builder.js';
 import { BALL_RADIUS } from '../game/golf/course.js';
 import { houseShape, propSize, randomSource, resolveLayout } from '../game/golf/placement.js';
 import { WORLD_RADIUS, column, groundFrame } from '../core/s3.js';
@@ -20,36 +20,22 @@ const DOOR = [0.62, 0.63, 0.66], CHIMNEY = [0.40, 0.38, 0.38], BARK = [0.42, 0.2
 
 /** The whole ground great-sphere y = 0, as a subdivided icosahedron. Its up is e_y everywhere. */
 export function buildGround(subdivisions = 5) {
-  const t = (1 + Math.sqrt(5)) / 2;
-  const points = [
-    [-1, t, 0], [1, t, 0], [-1, -t, 0], [1, -t, 0], [0, -1, t], [0, 1, t],
-    [0, -1, -t], [0, 1, -t], [t, 0, -1], [t, 0, 1], [-t, 0, -1], [-t, 0, 1],
-  ].map(p => { const l = Math.hypot(...p); return [p[0] / l, p[1] / l, p[2] / l]; });
-  let faces = [
-    0, 11, 5, 0, 5, 1, 0, 1, 7, 0, 7, 10, 0, 10, 11, 1, 5, 9, 5, 11, 4, 11, 10, 2, 10, 7, 6, 7, 1, 8,
-    3, 9, 4, 3, 4, 2, 3, 2, 6, 3, 6, 8, 3, 8, 9, 4, 9, 5, 2, 4, 11, 6, 2, 10, 8, 6, 7, 9, 8, 1,
-  ];
-  for (let s = 0; s < subdivisions; s++) {
-    const mid = new Map();
-    const midpoint = (a, b) => {
-      const key = a < b ? `${a}_${b}` : `${b}_${a}`;
-      if (mid.has(key)) return mid.get(key);
-      const m = [0, 1, 2].map(i => points[a][i] + points[b][i]), l = Math.hypot(...m);
-      points.push([m[0] / l, m[1] / l, m[2] / l]);
-      mid.set(key, points.length - 1);
-      return points.length - 1;
-    };
-    const next = [];
-    for (let f = 0; f < faces.length; f += 3) {
-      const [a, b, c] = [faces[f], faces[f + 1], faces[f + 2]];
-      const ab = midpoint(a, b), bc = midpoint(b, c), ca = midpoint(c, a);
-      next.push(a, ab, ca, b, bc, ab, c, ca, bc, ab, bc, ca);
-    }
-    faces = next;
-  }
+  const { points, faces } = icosahedron(subdivisions);
   const mesh = new MeshData();
   // the ground sphere lives in (x, z, w); e_y is normal to it everywhere
   for (const p of points) mesh.addVertex([p[0], 0, p[1], p[2]], [0, 1, 0, 0], [1, 1, 1]);
+  for (let f = 0; f < faces.length; f += 3) mesh.addTriangle(faces[f], faces[f + 1], faces[f + 2]);
+  return mesh.toBuffers();
+}
+
+/**
+ * A plain unit sphere in ordinary 3D space, used as a marker in the replay view. Its positions
+ * are Euclidean metres in xyz, not points of S^3, so the replay shader passes them through.
+ */
+export function buildMarker(subdivisions = 2) {
+  const { points, faces } = icosahedron(subdivisions);
+  const mesh = new MeshData();
+  for (const p of points) mesh.addVertex([p[0], p[1], p[2], 0], [p[0], p[1], p[2], 0], [1, 1, 1]);
   for (let f = 0; f < faces.length; f += 3) mesh.addTriangle(faces[f], faces[f + 1], faces[f + 2]);
   return mesh.toBuffers();
 }

@@ -29,7 +29,8 @@ const MIX = (a, b, t) => a.map((v, i) => Math.round(v + (b[i] - v) * t));
 
 export function createHud() {
   const nodes = {};
-  for (const id of ['scoreline', 'clubline', 'fps', 'hint', 'message', 'aim', 'meter', 'meter-label', 'meter-fill', 'meter-pole'])
+  for (const id of ['scoreline', 'clubline', 'fps', 'hint', 'message', 'aim', 'meter', 'meter-label',
+    'meter-fill', 'meter-pole', 'replay', 'replay-note', 'crosshair'])
     nodes[id] = byId(id);
   const set = (node, text) => { if (node.textContent !== text) node.textContent = text; };
 
@@ -38,6 +39,18 @@ export function createHud() {
       set(nodes.fps, `FPS: ${Math.round(frames * 1000 / elapsedMilliseconds)}`);
     },
     update(view) {
+      // the replay takes over the screen, so the playing HUD steps aside for it
+      const replaying = Boolean(view.replay);
+      nodes.replay.hidden = !replaying;
+      for (const id of ['scoreline', 'clubline', 'crosshair', 'hint'])
+        nodes[id].hidden = replaying;
+      if (replaying) {
+        set(nodes['replay-note'], `holed from ${Math.round(view.replay.length)} m · half speed · mouse to look around · click to continue`);
+        nodes.aim.hidden = true;
+        nodes.meter.hidden = true;
+        set(nodes.message, view.message);
+        return;
+      }
       set(nodes.scoreline, `Hole ${view.hole}/${view.holes}   Par ${view.par}   Strokes ${view.strokes}   Total ${view.total}`);
       set(nodes.clubline, `Pin: ${view.pin.toFixed(1)} m      Pole: ${view.pole.toFixed(1)} m straight up`);
       set(nodes.hint, view.hint);
