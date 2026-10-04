@@ -15,6 +15,8 @@ public class S3Ball
     public Vector4 pos, vel;
     public Matrix4x4 frame = Matrix4x4.identity;
     public bool grounded;
+    /// <summary>How fast (m/s) the ball struck the ground or an obstacle during the last step; 0 if it didn't.</summary>
+    public float impact;
     Vector4 lastUp = S3.EY;
 
     public float R = 12f;
@@ -75,13 +77,16 @@ public class S3Ball
         }
 
         // ground contact
+        bool wasGrounded = grounded;
         grounded = false;
+        impact = 0;
         if (HeightM <= radius)
         {
             pos = S3.Lift(Foot, radius / R);
             Vector4 n = S3.UpAt(pos);
             vel = S3.Tangent(pos, vel);
             float vn = Vector4.Dot(vel, n);
+            if (!wasGrounded) impact = Mathf.Max(0, -vn);
             if (vn < -bounceSpeed)
             {
                 vel -= (1 + restitution) * vn * n;
@@ -117,7 +122,7 @@ public class S3Ball
                 pos = S3.Lift(S3.Walk(foot, away, (min - d) / R), h / R);
                 Vector4 a = S3.Ortho(away, pos);
                 float va = Vector4.Dot(vel, a);
-                if (va < 0) vel -= 1.55f * va * a;
+                if (va < 0) { impact = Mathf.Max(impact, -va); vel -= 1.55f * va * a; }
                 vel = S3.Tangent(pos, vel);
             }
 
@@ -134,7 +139,7 @@ public class S3Ball
                 pos = S3.Lift(S3.Walk(foot, away, depth), h / R);
                 Vector4 a = S3.Ortho(away, pos);
                 float va = Vector4.Dot(vel, a);
-                if (va < 0) vel -= 1.55f * va * a;
+                if (va < 0) { impact = Mathf.Max(impact, -va); vel -= 1.55f * va * a; }
                 vel = S3.Tangent(pos, vel);
             }
 

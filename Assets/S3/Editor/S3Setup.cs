@@ -43,6 +43,7 @@ public static class S3Setup
         world.groundMaterial = groundMat;
         var golf = worldGo.AddComponent<S3Golf>();
         golf.player = player;
+        worldGo.AddComponent<S3Audio>().AssignDefaultClips();
 
         Directory.CreateDirectory(Path.GetDirectoryName(ScenePath));
         EditorSceneManager.SaveScene(scene, ScenePath);
