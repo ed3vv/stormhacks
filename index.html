@@ -23,7 +23,16 @@
   <section id="hud" hidden>
     <div id="fps">FPS: --</div>
     <div id="game">STROKES: 0</div>
-    <div class="help">Move cursor sideways to steer · up/down to set height · Space locks direction · Space again shoots · V free view · R resets</div>
+    <div id="hint" hidden></div>
+    <div id="help" class="help">Move cursor sideways to steer · up/down to set height · Space locks direction · Space again shoots · V free view · R resets</div>
+  </section>
+  <section id="laser-hud" hidden>
+    <div id="crosshair" hidden></div>
+    <div id="banner" hidden></div>
+    <div id="laser-bottom">
+      <div id="status" hidden></div>
+      <div id="inventory" hidden></div>
+    </div>
   </section>
   <div id="error" hidden></div>
   <script type="module" src="src/app/main.js"></script>

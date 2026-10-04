@@ -29,3 +29,8 @@ export function packedBoxData() {
   }
   return packed;
 }
+
+// The golf hole and its flag. Every minigame shares this world, so the hole is part
+// of the scenery too.
+export const HOLE_POSITION = [Math.cos(1.65), Math.sin(1.65), 0];
+export const HOLE_RADIUS = .02;

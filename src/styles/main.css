@@ -8,7 +8,17 @@ body { font-family: ui-monospace, SFMono-Regular, Menlo, monospace; color: #eef1
 #fps, #game { font-weight: 700; }
 .help { font: 13px/1.35 system-ui, sans-serif; }
 #error { position: fixed; inset: 20px; padding: 20px; background: #300; color: #fff; white-space: pre-wrap; }
-#hud[hidden] { display: none; }
+#hud[hidden], #hud [hidden], #laser-hud[hidden], #laser-hud [hidden] { display: none; }
+#hint { max-width: min(460px, calc(100vw - 28px)); font: 13px/1.4 system-ui, sans-serif; }
+#laser-hud { position: fixed; inset: 0; pointer-events: none; }
+#laser-bottom { position: absolute; left: 50%; bottom: 18px; transform: translateX(-50%); display: grid; justify-items: center; gap: 8px; }
+#laser-bottom > div { width: max-content; max-width: calc(100vw - 28px); padding: 7px 10px; border-radius: 7px; background: rgb(10 13 29 / 74%); text-shadow: 0 1px 2px #000; white-space: pre; }
+#status { font-size: 13px; }
+#inventory { font-weight: 700; }
+#banner { position: absolute; left: 50%; top: calc(50% - 90px); transform: translate(-50%, -50%); padding: 12px 22px; border-radius: 10px; background: rgb(10 13 29 / 74%); color: #ffe073; font: 800 30px/1.25 system-ui, sans-serif; text-align: center; white-space: pre; }
+#crosshair { position: absolute; left: 50%; top: 50%; width: 18px; height: 18px; transform: translate(-50%, -50%); --c: #fff; background: linear-gradient(var(--c), var(--c)) center / 2px 100% no-repeat, linear-gradient(var(--c), var(--c)) center / 100% 2px no-repeat; filter: drop-shadow(0 0 1px #000) drop-shadow(0 0 1px #000); }
+#crosshair.place { --c: #9f9; }
+#crosshair.target { --c: #8ff; }
 #menu { position: fixed; inset: 0; z-index: 10; display: flex; flex-direction: column; align-items: center; justify-content: center; gap: 36px; padding: 16px; text-align: center; background: radial-gradient(circle at 50% 40%, #24356b, #070912 70%); }
 #menu[hidden], #menu [hidden] { display: none; }
 #menu h1 { margin: 0; font: 700 clamp(28px, 6vw, 60px)/1.1 system-ui, sans-serif; letter-spacing: .01em; text-shadow: 0 2px 12px rgb(0 0 0 / 60%); }

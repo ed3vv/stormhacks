@@ -2,10 +2,12 @@
   "name": "spherical-plane-world",
   "version": "1.0.0",
   "private": true,
+  "type": "module",
   "description": "A modular WebGL2 browser game.",
   "scripts": {
     "dev": "node tools/dev-server.cjs",
     "start": "node tools/dev-server.cjs",
-    "check": "node tools/check-modules.cjs"
+    "check": "node tools/check-modules.cjs",
+    "check:laser": "node tools/laser-selftest.cjs"
   }
 }

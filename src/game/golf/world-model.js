@@ -1,4 +1,4 @@
-import { BOXES, PHYSICS_BOX_COUNT } from './course-data.js';
+import { BOXES, PHYSICS_BOX_COUNT, HOLE_POSITION, HOLE_RADIUS } from '../world/scenery.js';
 import { dot, add, sub, mul, len, norm, cross, xyz, clamp } from '../../core/vector.js';
 
 const DEFAULT_LAUNCH=24*Math.PI/180, MIN_LAUNCH=2*Math.PI/180, MAX_LAUNCH=Math.PI/2;
@@ -8,7 +8,7 @@ export const GUIDE_DOTS=9;
 const launchSpeed = p => .42+p*1.18+.7*p**4;
 
 export class WorldModel {
-  constructor(){ this.ballRadius=.01; this.holeRadius=.02; this.holePosition=[Math.cos(1.65),Math.sin(1.65),0]; this.reset(); }
+  constructor(){ this.ballRadius=.01; this.holeRadius=HOLE_RADIUS; this.holePosition=[...HOLE_POSITION]; this.reset(); }
   reset(){
     this.ballPosition=[1,0,0]; this.aimDirection=[0,1,0]; this.baseAim=[0,1,0]; this.lockedCamera=[0,1,0];
     this.groundVelocity=[0,0,0]; this.airVelocity=[0,0,0,0]; this.support=null; this.supportAltitude=0;
