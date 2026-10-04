@@ -127,6 +127,7 @@ public static class S3Scenery
             Add(world, scene, mb, frame, footprint, h + rh + 0.7f, 0, 0.3f, footprint * 0.9f, h + rh, footprint * 0.95f, h + rh);
             keep.Add(new KeepOut(frame.GetColumn(3), footprint + 1.5f));
         }
+        BuildFences(world, keep, false);
 
         // trees
         for (int i = 0; i < 34; i++)
@@ -153,7 +154,7 @@ public static class S3Scenery
         }
 
         // mushrooms
-        for (int i = 0; i < 26; i++)
+        for (int i = 0; i < 10; i++)
         {
             if (!TryPlace(rng, R, keep, 0.4f, out var frame)) continue;
             var mb = new MeshBuilder();
@@ -168,8 +169,8 @@ public static class S3Scenery
             Add(world, scene, mb, frame, occlusion: 0.2f);
         }
 
-        // grass tufts (all over the world)
-        for (int i = 0; i < 1100; i++)
+        // grass tufts (all over the world, sparse enough to keep the ground calm)
+        for (int i = 0; i < 520; i++)
         {
             if (!TryPlace(rng, R, keep, 0.2f, out var frame, attempts: 4)) continue;
             var mb = new MeshBuilder(1f);
@@ -277,14 +278,14 @@ public static class S3Scenery
 
         // tall grass in the oases, dry tufts on the sand
         foreach (var (center, r) in oases)
-            for (int k = 0; k < (int)(r * r * 0.9f); k++)
+            for (int k = 0; k < (int)(r * r * 0.55f); k++)
             {
                 if (!TryPlaceNear(rng, R, center, 0, r * 0.9f, keep, 0.15f, out var frame, attempts: 3)) continue;
                 var mb = new MeshBuilder(1f);
                 TallGrass(mb, rng);
                 Add(world, scene, mb, frame, sway: 1f, occlusion: 0.5f);
             }
-        for (int i = 0; i < 320; i++)
+        for (int i = 0; i < 160; i++)
         {
             if (!TryPlace(rng, R, keep, 0.2f, out var frame, attempts: 3)) continue;
             var mb = new MeshBuilder(1f);
@@ -331,7 +332,7 @@ public static class S3Scenery
             foreach (var b in level.solution) decor.Add(new KeepOut(b.position, 1f));
         }
         int fenceKeep = keep.Count;
-        BuildFences(world, keep);
+        BuildFences(world, keep, true);
         for (int i = fenceKeep; i < keep.Count; i++) decor.Add(keep[i]);
         // new props that stop the ball stay off the straight line from each tee to its cup (the fences are the obstacles there)
         var lines = new List<KeepOut>();
@@ -478,7 +479,7 @@ public static class S3Scenery
 
         // small things that don't stop anything: pebbles, shards of ice, little mounds of snow, stones under the snow,
         // and frosted reeds
-        for (int i = 0; i < 60; i++)
+        for (int i = 0; i < 20; i++)
         {
             if (!TryPlace(rng, R, decor, 0.3f, out var frame, attempts: 4)) continue;
             var mb = new MeshBuilder(1f);
@@ -486,7 +487,7 @@ public static class S3Scenery
             Add(world, scene, mb, frame, occlusion: 0.2f);
             decor.Add(new KeepOut(frame.GetColumn(3), 0.5f));
         }
-        for (int i = 0; i < 30; i++)
+        for (int i = 0; i < 10; i++)
         {
             if (!TryPlace(rng, R, decor, 0.4f, out var frame, attempts: 4)) continue;
             var mb = new MeshBuilder(1f);
@@ -494,7 +495,7 @@ public static class S3Scenery
             Add(world, scene, mb, frame, occlusion: 0.15f);
             decor.Add(new KeepOut(frame.GetColumn(3), 0.5f));
         }
-        for (int i = 0; i < 24; i++)
+        for (int i = 0; i < 12; i++)
         {
             float rx = 0.6f + 0.7f * (float)rng.NextDouble();
             if (!TryPlace(rng, R, decor, rx, out var frame, attempts: 4)) continue;
@@ -504,7 +505,7 @@ public static class S3Scenery
             Add(world, scene, mb, frame, occlusion: 0.15f, shadowRadius: rx * 0.8f, shadowHeight: 0.3f, shadowStrength: 0.25f);
             decor.Add(new KeepOut(frame.GetColumn(3), rx));
         }
-        for (int i = 0; i < 40; i++)
+        for (int i = 0; i < 12; i++)
         {
             if (!TryPlace(rng, R, decor, 0.5f, out var frame, attempts: 4)) continue;
             var mb = new MeshBuilder(1f);
@@ -513,7 +514,7 @@ public static class S3Scenery
                          c => c.y > 0.6f ? Color.Lerp(Snow, SnowShade, 0.3f) : new Color(g, g * 1.04f, g * 1.16f));
             Add(world, scene, mb, frame, occlusion: 0f);
         }
-        for (int i = 0; i < 140; i++)
+        for (int i = 0; i < 60; i++)
         {
             if (!TryPlace(rng, R, decor, 0.2f, out var frame, attempts: 3)) continue;
             var mb = new MeshBuilder(1f);
@@ -526,16 +527,16 @@ public static class S3Scenery
     // ------------------------------------------------------------------ eternal poles: fences and rock
 
     /// <summary>
-    /// The golf fences (S3World.basinFences): post-and-rail panels in an arc round the tee side of a green, left out
-    /// where that hole's lock stands. Each hole's panels are boxes in world.holeFences (they stop the ball and the
-    /// walker while the hole is on; light slips between the rails) and get a renderer of their own, so S3World.SetActiveHole
-    /// can put them up and take them down. Other props keep clear of every fence, and of the open side's approach:
-    /// the way in from the tee's antipode, where a shot straight over the pole comes down.
+    /// The golf fences (S3World.Fences): post-and-rail panels in an arc round the tee side of a green, left out
+    /// where that hole's lock or a building stands. Each hole's panels are boxes in world.holeFences (they stop the ball
+    /// and the walker while the hole is on; light slips between the rails) and get a renderer of their own, so
+    /// S3World.SetActiveHole can put them up and take them down. Props placed afterwards keep clear of every fence, and
+    /// of the open side's approach: the way in from the tee's antipode, where a shot straight over the pole comes down.
     /// </summary>
-    static void BuildFences(S3World world, List<KeepOut> keep)
+    static void BuildFences(S3World world, List<KeepOut> keep, bool snowy)
     {
         float R = world.radius;
-        foreach (var def in world.basinFences)
+        foreach (var def in world.Fences)
         {
             if (def.hole < 0 || def.hole >= world.holes.Count) continue;
             var hole = world.holes[def.hole];
@@ -551,8 +552,9 @@ public static class S3Scenery
             for (int k = 0; k < n; k++)
             {
                 var panel = S3Laser.Block.Wall(pts[k], pts[k + 1], R, 0.16f, 1.2f);
-                bool clear = own == null || (!own.blocks.Exists(b => panel.FootprintOverlaps(b, 0.25f / R))
-                                             && !own.solution.Exists(b => panel.FootprintContains(b.position, 1.4f / R)));
+                bool clear = (own == null || (!own.blocks.Exists(b => panel.FootprintOverlaps(b, 0.25f / R))
+                                              && !own.solution.Exists(b => panel.FootprintContains(b.position, 1.4f / R))))
+                             && !world.obstacles.Exists(o => panel.FootprintContains(o.foot, (o.radius + 0.3f) / R));
                 if (clear) panels[k] = panel;
             }
             var list = new List<S3Laser.Block>();
@@ -564,7 +566,7 @@ public static class S3Scenery
                 list.Add(panel);
                 var mb = new MeshBuilder(0.4f);
                 float hl = S3.Dist(pts[k], pts[k + 1]) * R / 2;
-                FencePanel(mb, hl, true, k == n - 1 || panels[k + 1] == null);
+                FencePanel(mb, hl, true, k == n - 1 || panels[k + 1] == null, snowy);
                 mesh.AppendBaked(mb, S3.FrameAt(panel.position, S3.EY, S3.DirTo(panel.position, pts[k + 1])), R, 0, 0, 0.3f);
                 keep.Add(new KeepOut(panel.position, hl + 0.8f));
             }
@@ -578,24 +580,28 @@ public static class S3Scenery
         }
     }
 
-    /// <summary>One fence panel along local z (-hl..hl): posts capped with snow, two rails clear of the light (0.45 m up), a drift at its foot.</summary>
-    static void FencePanel(MeshBuilder mb, float hl, bool startPost, bool endPost)
+    /// <summary>
+    /// One fence panel along local z (-hl..hl): posts and two rails clear of the light (0.45 m up). Snowy: snow caps
+    /// and a drift at its foot; otherwise white-painted, so it stands out against the grass.
+    /// </summary>
+    static void FencePanel(MeshBuilder mb, float hl, bool startPost, bool endPost, bool snowy = true)
     {
-        var post = new Color(0.36f, 0.26f, 0.19f);
-        var rail = new Color(0.48f, 0.35f, 0.25f);
+        var post = snowy ? new Color(0.36f, 0.26f, 0.19f) : new Color(0.93f, 0.92f, 0.88f);
+        var rail = snowy ? new Color(0.48f, 0.35f, 0.25f) : new Color(0.97f, 0.96f, 0.93f);
+        var cap = snowy ? Snow : new Color(0.80f, 0.79f, 0.75f);
         void Post(float z)
         {
             mb.Box(new Vector3(-0.07f, 0, z - 0.07f), new Vector3(0.07f, 1.22f, z + 0.07f), post);
-            mb.Frustum(new Vector3(0, 1.22f, z), 0.11f, 0.03f, 0.13f, 6, Snow);
+            mb.Frustum(new Vector3(0, 1.22f, z), 0.11f, 0.03f, 0.13f, 6, cap);
         }
         if (startPost) Post(-hl);
         if (endPost) Post(hl);
         foreach (float y in new[] { 0.18f, 0.78f })
         {
             mb.Box(new Vector3(-0.03f, y, -hl), new Vector3(0.03f, y + 0.12f, hl), rail);
-            mb.Box(new Vector3(-0.045f, y + 0.12f, -hl), new Vector3(0.045f, y + 0.16f, hl), Snow);
+            mb.Box(new Vector3(-0.045f, y + 0.12f, -hl), new Vector3(0.045f, y + 0.16f, hl), cap);
         }
-        mb.Icosphere(new Vector3(0, -0.06f, 0), new Vector3(0.26f, 0.2f, hl * 0.95f), 1, Color.Lerp(Snow, SnowShade, 0.2f));
+        if (snowy) mb.Icosphere(new Vector3(0, -0.06f, 0), new Vector3(0.26f, 0.2f, hl * 0.95f), 1, Color.Lerp(Snow, SnowShade, 0.2f));
     }
 
     /// <summary>A tor: a few snow-capped boulders heaped together. Returns how far it reaches from its centre.</summary>

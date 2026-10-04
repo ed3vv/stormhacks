@@ -146,6 +146,13 @@ public class S3World : MonoBehaviour
         new HoleDef(3.3f, 24f, 1.1f, -9.4f, 4),
         new HoleDef(2.7f, -6.7f, -19f, 12.1f, 4),
     };
+    [Tooltip("Fences shutting the tee side of some Meadow greens (hole index from 0, arc radius m, half span degrees). Hole 3's cup is the tee's antipode, so it has no tee side.")]
+    public FenceDef[] meadowFences =
+    {
+        new FenceDef(1, 4.4f, 115),
+        new FenceDef(3, 4.4f, 115),
+        new FenceDef(4, 4.4f, 115),
+    };
     public float cupRadius = 0.62f;
     public float greenRadius = 3.5f;
 
@@ -194,7 +201,7 @@ public class S3World : MonoBehaviour
 
     [NonSerialized] public readonly List<Hole> holes = new List<Hole>();
     [NonSerialized] public readonly List<Obstacle> obstacles = new List<Obstacle>();
-    /// <summary>The active hole's golf fences (Eternal Poles), as boxes: they stop the ball and the walker, but light slips between their rails.</summary>
+    /// <summary>The active hole's golf fences, as boxes: they stop the ball and the walker, but light slips between their rails.</summary>
     [NonSerialized] public readonly List<S3Laser.Block> fences = new List<S3Laser.Block>();
     /// <summary>Every hole's fences and their renderers (see SetActiveHole).</summary>
     [NonSerialized] public readonly Dictionary<int, List<S3Laser.Block>> holeFences = new Dictionary<int, List<S3Laser.Block>>();
@@ -206,7 +213,10 @@ public class S3World : MonoBehaviour
     public bool HasLasers => biome != Biome.Meadow;
     public string MapName => biome == Biome.Desert ? "Desert Oasis" : biome == Biome.Basin ? "Eternal Poles" : "Meadow";
 
-    public Style ActiveStyle => biome == Biome.Desert ? desertStyle : biome == Biome.Basin ? basinStyle : meadowStyle;
+    /// <summary>This map's golf fences.</summary>
+    public FenceDef[] Fences => biome == Biome.Basin ? basinFences : biome == Biome.Meadow ? meadowFences : Array.Empty<FenceDef>();
+
+    public Style ActiveStyle =>biome == Biome.Desert ? desertStyle : biome == Biome.Basin ? basinStyle : meadowStyle;
 
     // ---- props that dither away when they block the view (faded on the CPU, one value per prop)
     public const int MaxFadeProps = 512;

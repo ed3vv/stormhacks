@@ -343,18 +343,6 @@ public class S3Puzzle
 
     // ------------------------------------------------------------------ HUD text
 
-    public string InventoryText
-    {
-        get
-        {
-            if (Level == null) return "";
-            var parts = new List<string>();
-            if (Level.mirrors > 0) parts.Add($"{(tool == Kind.Mirror ? "▶" : "  ")} [1] Mirror × {mirrorsLeft}");
-            if (Level.diffractors > 0) parts.Add($"{(tool == Kind.Diffractor ? "▶" : "  ")} [2] Diffractor × {diffractorsLeft}");
-            return string.Join("      ", parts);
-        }
-    }
-
     public string StatusText
     {
         get
@@ -370,11 +358,11 @@ public class S3Puzzle
                 if (preview.litGoals.Contains(i)) litThen++;
             }
             if (goals == 0) return "";
-            if (litThen == goals) return goals > 1 ? "✦ Put it down here and the crystals light up" : "✦ Put it down here and the crystal lights up";
+            if (litThen == goals) return goals > 1 ? "Put it down here and the crystals light up" : "Put it down here and the crystal lights up";
             // distances from the piece in your hands (your own distance to each crystal is on its waypoint):
             // to the crystals still dark and to the pieces you have put down, against the antipode's 37.7 m
             var parts = new List<string>();
-            if (litThen > litNow) parts.Add($"✧ lights {litThen} of {goals} crystals");
+            if (litThen > litNow) parts.Add($"Lights {litThen} of {goals} crystals");
             var dark = new List<string>();
             foreach (var g in UnlitGoals) dark.Add($"{S3.Dist(ghost.position, g.position) * R:0.0}");
             if (dark.Count > 0) parts.Add($"Piece to crystal {string.Join(" / ", dark)} m");
@@ -475,7 +463,10 @@ public class S3Puzzle
             float len = Mathf.Min(s.length, S3Laser.Tau);
             int n = Mathf.Max(1, Mathf.CeilToInt(len / step));
             Color col = s.diffracted ? BeamGold : BeamRed;
-            var info = new Vector4(s.diffracted ? 0.045f : 0.065f, BeamLift, alpha, 0);
+            // a diffractor sprays light over the whole sky; only its rays along the ground matter for the puzzles,
+            // so the rest are drawn thin and faint
+            bool sky = s.diffracted && (Mathf.Abs(s.start.y) > 1e-4f || Mathf.Abs(s.dir.y) > 1e-4f);
+            var info = new Vector4(!s.diffracted ? 0.065f : sky ? 0.022f : 0.045f, BeamLift, sky ? alpha * 0.3f : alpha, 0);
             int start = bv.Count;
             for (int k = 0; k <= n; k++)
             {

@@ -142,7 +142,6 @@ public class S3Golf : MonoBehaviour
     Matrix4x4 followFrame;
     string message = "";
     float messageUntil;
-    GUIStyle big, small, center, subStyle, hintStyle, meterStyle, markerStyle, iconStyle, wrapStyle;
     Camera cam;
     // laser puzzles (Desert, Basin)
     S3Puzzle puzzle;
@@ -159,7 +158,6 @@ public class S3Golf : MonoBehaviour
     // level selector (L)
     bool selecting;
     string[][] levelLabels;       // per map in Maps order
-    GUIStyle menuTitle, menuHeader, menuButton, menuButtonSmall, menuControls;
     static readonly S3World.Biome[] Maps = { S3World.Biome.Meadow, S3World.Biome.Desert, S3World.Biome.Basin };
 
     S3World.Hole Hole => world.holes[holeIndex];
@@ -437,6 +435,7 @@ public class S3Golf : MonoBehaviour
         float dist = world.GroundDistance(Hole.tee, Hole.cup);
         Say($"Hole {index + 1}  ·  Par {Hole.par}  ·  {dist:0} m" +
             (dist > 0.97f * Mathf.PI * R ? "\nThe cup is at your antipode: every direction leads there." : "") +
+            (!locked && world.holeFences.ContainsKey(index) ? "\nThe green is fenced off on this side: come in from behind, over the pole or round the world." : "") +
             (locked ? $"\nSealed in ice: light {TheCrystal}. F to golf whenever you're ready." : ""), 5.5f);
         if (locked) ShowHint(10f);
         UpdateVisuals();
@@ -569,6 +568,7 @@ public class S3Golf : MonoBehaviour
         }
         UpdateBarrier(dt);
         UpdateAdvance(dt);
+        if (ball == null) return;   // finishing the Meadow just moved on to the Desert, which has no ball
         UpdateFollow(dt);
         stopTime += dt;
         UpdateVisuals();
@@ -1048,96 +1048,135 @@ public class S3Golf : MonoBehaviour
     public string DebugState =>
         $"state {state}, ball height {ball.HeightM:0.0} m, ground distance from tee {world.GroundDistance(ball.Foot, Hole.tee):0.0} m, follow {followWeight:0.00}";
 
-    // ------------------------------------------------------------------ HUD
+    // ------------------------------------------------------------------ HUD (drawn with S3Hud)
 
     void OnGUI()
     {
         if (world == null || (ball == null && puzzle == null)) return;
-        if (big == null)
-        {
-            wrapStyle = new GUIStyle(GUI.skin.label) { fontSize = 16, wordWrap = true, alignment = TextAnchor.UpperCenter };
-            big = new GUIStyle(GUI.skin.label) { fontSize = 22, fontStyle = FontStyle.Bold };
-            small = new GUIStyle(GUI.skin.label) { fontSize = 15 };
-            center = new GUIStyle(GUI.skin.label) { fontSize = 34, fontStyle = FontStyle.Bold, alignment = TextAnchor.MiddleCenter };
-            subStyle = new GUIStyle(GUI.skin.label) { fontSize = 20, alignment = TextAnchor.UpperCenter };
-            hintStyle = new GUIStyle(small) { alignment = TextAnchor.MiddleCenter, fontSize = 18 };
-            meterStyle = new GUIStyle(small) { alignment = TextAnchor.MiddleCenter };
-            markerStyle = new GUIStyle(small) { alignment = TextAnchor.MiddleCenter, fontStyle = FontStyle.Bold, fontSize = 16 };
-            iconStyle = new GUIStyle(big) { alignment = TextAnchor.MiddleCenter, fontSize = 28 };
-            menuTitle = new GUIStyle(center) { fontSize = 30 };
-            menuHeader = new GUIStyle(big) { alignment = TextAnchor.MiddleCenter, fontSize = 20 };
-            menuButton = new GUIStyle(GUI.skin.button) { fontSize = 15, alignment = TextAnchor.MiddleLeft, padding = new RectOffset(12, 8, 4, 4) };
-            menuButtonSmall = new GUIStyle(menuButton) { fontSize = 12 };   // for labels too long for a narrow column
-            menuControls = new GUIStyle(small) { alignment = TextAnchor.MiddleCenter };
-        }
-        float w = Screen.width, h = Screen.height;
+        S3Hud.Begin();
+        float w = S3Hud.Width, h = S3Hud.Height;
         if (selecting) { DrawLevelSelect(w, h); return; }
 
         DrawWaypoint();
-        if (puzzle != null) DrawPuzzleHud(w, h);
         bool mouseFree = Cursor.lockState != CursorLockMode.Locked;
+        var hints = new List<S3Hud.Hint>();
+        string note = mouseFree ? "Click to play" : null;
         if (ball == null)
         {
-            Shadowed(new Rect(18, 12, 900, 30), $"Puzzle {puzzleIndex + 1}/{world.levels.Count}  ·  {puzzle.Level?.title}", big);
-            Shadowed(new Rect(18, 42, 900, 24), world.MapName, small);
-            Shadowed(new Rect(0, h - 120, w, 30), mouseFree ? "Click to play" : "", hintStyle);
-            DrawFooter(h);
-            DrawMessage(w, MessageY(h));
-            return;
+            // the Desert: puzzles on foot
+            DrawScorecard(world.MapName, $"Puzzle {puzzleIndex + 1} / {world.levels.Count}", puzzle.Level?.title);
+            DrawPuzzleHud(w, h);
+            if (!puzzle.Solved) { hints.Add(new S3Hud.Hint("LMB", "Place")); hints.Add(new S3Hud.Hint("Q E", "Turn")); hints.Add(new S3Hud.Hint("H", "Hint")); }
         }
-
-        Shadowed(new Rect(18, 12, 900, 30), $"Hole {holeIndex + 1}/{world.holes.Count}  ·  Par {Hole.par}  ·  Strokes {strokes}", big);
-        bool aiming = state == State.Ready && !exploring;
-        Shadowed(new Rect(18, 42, 900, 24), $"{world.MapName}  ·  Total {total}  ·  Pin {world.GroundDistance(ball.Foot, Hole.cup):0} m" +
-                                            (aiming ? $"  ·  Launch {aimAngle:0}°" : "") + (locked ? "  ·  Cup sealed" : ""), small);
-
-        string hint = "", key = puzzle == null ? "E" : "F";
-        if (mouseFree) hint = "Click to play";
-        else if (gliding || glidePending) hint = "";
-        else if (aiming && !powerSelecting && world.GroundDistance(ball.Foot, -Hole.cup) < world.greenRadius)
-            hint = "On the flag's antipode: hit it straight up (W) at full power and it comes down on the green";
-        else if (aiming) hint = powerSelecting ? "Space  shoot   ·   Right-click  cancel" : "A/D  aim   ·   W/S  height   ·   Space  power";
-        else if (state == State.Ready && NearBall) hint = $"{key}  address ball";
-        else if (state == State.Ready && locked) hint = $"Light {TheCrystal} to open the cup   ·   {key}  back to ball";
-        else if (state == State.Ready) hint = $"{key}  back to ball";
-        Shadowed(new Rect(0, h - 120, w, 30), hint, hintStyle);
-        DrawFooter(h);
-
-        if (powerSelecting)
+        else
         {
-            float bw = 320, bh = 18, x = w / 2 - bw / 2, y = h - 160;
-            GUI.color = new Color(0, 0, 0, 0.6f);
-            GUI.DrawTexture(new Rect(x - 3, y - 3, bw + 6, bh + 6), Texture2D.whiteTexture);
-            GUI.color = Color.Lerp(new Color(0.3f, 0.9f, 0.3f), new Color(1f, 0.25f, 0.15f), power);
-            GUI.DrawTexture(new Rect(x, y, bw * power, bh), Texture2D.whiteTexture);
-            float poleMark = PoleCrossingPower();
-            if (aimAngle > 75 && poleMark <= 1)
+            bool aiming = state == State.Ready && !exploring;
+            DrawScorecard(world.MapName, $"Hole {holeIndex + 1} / {world.holes.Count}", $"Par {Hole.par}   ·   Stroke {strokes}   ·   Total {total}", locked);
+            DrawStats(w, aiming);
+            if (puzzle != null) DrawPuzzleHud(w, h);
+            string key = puzzle == null ? "E" : "F";
+            if (note != null || gliding || glidePending) { }
+            else if (aiming && !powerSelecting && world.GroundDistance(ball.Foot, -Hole.cup) < world.greenRadius)
+                note = "On the flag's antipode: hit it straight up at full power and it comes down on the green";
+            else if (aiming && powerSelecting) { hints.Add(new S3Hud.Hint("Space", "Shoot")); hints.Add(new S3Hud.Hint("RMB", "Cancel")); }
+            else if (aiming) { hints.Add(new S3Hud.Hint("A D", "Aim")); hints.Add(new S3Hud.Hint("W S", "Height")); hints.Add(new S3Hud.Hint("Space", "Power")); }
+            else if (state == State.Ready)
             {
-                GUI.color = new Color(1, 1, 1, 0.85f);
-                GUI.DrawTexture(new Rect(x + bw * poleMark, y - 5, 2, bh + 10), Texture2D.whiteTexture);
+                hints.Add(new S3Hud.Hint(key, NearBall ? "Address ball" : "Back to ball"));
+                if (locked) { hints.Add(new S3Hud.Hint("LMB", "Place")); hints.Add(new S3Hud.Hint("Q E", "Turn")); }
             }
-            GUI.color = Color.white;
-            Shadowed(new Rect(x, y - 26, bw, 24), $"Power {power * 100:0}%", meterStyle);
+            if (powerSelecting) DrawPowerMeter(w, h);
         }
-
+        if (note != null) S3Hud.Note(w / 2, h - 46, note);
+        else S3Hud.Hints(w / 2, h - 46, hints);
+        DrawFooter(h);
         DrawMessage(w, MessageY(h));
+    }
+
+    /// <summary>Top left: the map, the hole (or puzzle), and the score.</summary>
+    void DrawScorecard(string map, string title, string line, bool sealedCup = false)
+    {
+        const float x = 24, y = 24, pad = 20;
+        bool hasLine = !string.IsNullOrEmpty(line);
+        float textW = Mathf.Max(S3Hud.Measure(title, S3Hud.Heading).x, hasLine ? S3Hud.Measure(line, S3Hud.Body).x : 0);
+        float cw = Mathf.Max(230, textW + 2 * pad), ch = hasLine ? 108 : 80;
+        S3Hud.Panel(new Rect(x, y, cw, ch));
+        S3Hud.Text(new Rect(x + pad, y + 16, cw, 16), map.ToUpperInvariant(), S3Hud.Eyebrow, S3Hud.Accent, false);
+        S3Hud.Text(new Rect(x + pad, y + 34, cw, 36), title, S3Hud.Heading, S3Hud.Ink, false);
+        if (hasLine) S3Hud.Text(new Rect(x + pad, y + 74, cw, 22), line, S3Hud.Body, S3Hud.Dim, false);
+        if (!sealedCup) return;
+        string s = $"Cup sealed  ·  light {TheCrystal}";
+        float sw = S3Hud.Measure(s, S3Hud.Small).x + 32;
+        var r = new Rect(x, y + ch + 10, sw, 32);
+        S3Hud.Pill(r, new Color(0.22f, 0.45f, 0.70f, 0.8f));
+        S3Hud.Text(new Rect(r.x + 16, r.y + 7, sw, 18), s, S3Hud.Small, S3Hud.Ink, false);
+    }
+
+    /// <summary>Top right: distance to the pin, and the launch angle while you aim.</summary>
+    void DrawStats(float w, bool aiming)
+    {
+        const float colW = 108, pad = 20;
+        int n = aiming ? 2 : 1;
+        var r = new Rect(w - 24 - (n * colW + pad), 24, n * colW + pad, 80);
+        S3Hud.Panel(r);
+        void Stat(int i, string label, string value)
+        {
+            float x = r.x + pad + i * colW;
+            S3Hud.Text(new Rect(x, r.y + 16, colW, 16), label, S3Hud.Eyebrow, S3Hud.Dim, false);
+            S3Hud.Text(new Rect(x, r.y + 34, colW, 36), value, S3Hud.Heading, S3Hud.Ink, false);
+        }
+        Stat(0, "PIN", $"{world.GroundDistance(ball.Foot, Hole.cup):0} m");
+        if (aiming) Stat(1, "LAUNCH", $"{aimAngle:0}°");
+    }
+
+    void DrawPowerMeter(float w, float h)
+    {
+        const float bw = 400, bh = 14;
+        // just a slim bar and its labels, no card: steep shots tilt the view up and put the ball down here
+        float x = w / 2 - bw / 2, y = h - 100;
+        S3Hud.Text(new Rect(x, y - 24, bw, 16), "POWER", S3Hud.Eyebrow, S3Hud.Ink);
+        string pct = $"{power * 100:0}%";
+        float pw = S3Hud.Measure(pct, S3Hud.BodyBold).x;
+        S3Hud.Text(new Rect(x + bw - pw, y - 27, pw + 2, 22), pct, S3Hud.BodyBold, S3Hud.Ink);
+        S3Hud.Bar(new Rect(x - 3, y - 3, bw + 6, bh + 6), new Color(0.06f, 0.08f, 0.12f, 0.7f));
+        S3Hud.Bar(new Rect(x, y, bw, bh), new Color(1, 1, 1, 0.12f));
+        Color mid = new Color(1f, 0.82f, 0.30f);
+        Color fill = power < 0.5f ? Color.Lerp(new Color(0.36f, 0.86f, 0.46f), mid, power * 2) : Color.Lerp(mid, new Color(1f, 0.34f, 0.26f), power * 2 - 1);
+        if (power > 0.005f) S3Hud.Bar(new Rect(x, y, Mathf.Max(bh, bw * power), bh), fill);
+        float poleMark = PoleCrossingPower();
+        if (aimAngle > 75 && poleMark <= 1)
+        {
+            float px = x + bw * poleMark;
+            GUI.color = new Color(1, 1, 1, 0.9f);
+            GUI.DrawTexture(new Rect(px - 1, y - 5, 2, bh + 10), Texture2D.whiteTexture);
+            GUI.color = Color.white;
+            S3Hud.Centered(px, y + bh + 14, "OVER THE POLE", S3Hud.Eyebrow, S3Hud.Ink, true);
+        }
     }
 
     /// <summary>The one permanent reminder: everything else lives in the L menu.</summary>
     void DrawFooter(float h)
     {
-        GUI.color = new Color(1, 1, 1, 0.75f);
-        Shadowed(new Rect(18, h - 32, 400, 24), "L   levels & controls", small);
-        GUI.color = Color.white;
+        float kw = S3Hud.Key(24, h - 36, "L");
+        S3Hud.Text(new Rect(24 + kw + 10, h - 47, 300, 22), "Levels & controls", S3Hud.Small, S3Hud.Dim);
     }
 
-    /// <summary>The centre message: its first line big, the rest smaller underneath.</summary>
+    /// <summary>The centre message, on its own card: the first line big, the rest smaller underneath. It fades out at the end.</summary>
     void DrawMessage(float w, float y)
     {
-        if (Time.realtimeSinceStartup >= messageUntil || message.Length == 0) return;
-        int nl = message.IndexOf('\n');
-        Shadowed(new Rect(0, y, w, 46), nl < 0 ? message : message.Substring(0, nl), center);
-        if (nl >= 0) Shadowed(new Rect(20, y + 48, w - 40, 100), message.Substring(nl + 1), subStyle);
+        float left = messageUntil - Time.realtimeSinceStartup;
+        if (left <= 0 || message.Length == 0) return;
+        var lines = message.Split('\n');
+        float textW = S3Hud.Measure(lines[0], S3Hud.Title).x;
+        for (int i = 1; i < lines.Length; i++) textW = Mathf.Max(textW, S3Hud.Measure(lines[i], S3Hud.Sub).x);
+        float cw = Mathf.Min(w - 48, textW + 80), ch = 80 + 30 * (lines.Length - 1) + (lines.Length > 1 ? 12 : 0);
+        var c = GUI.color;
+        GUI.color = new Color(1, 1, 1, Mathf.Clamp01(left / 0.35f));
+        S3Hud.Panel(new Rect(w / 2 - cw / 2, y, cw, ch), 1.3f);
+        S3Hud.Text(new Rect(0, y + 12, w, 56), lines[0], S3Hud.Title, S3Hud.Ink, false);
+        for (int i = 1; i < lines.Length; i++)
+            S3Hud.Text(new Rect(0, y + 68 + 30 * (i - 1), w, 28), lines[i], S3Hud.Sub, S3Hud.Dim, false);
+        GUI.color = c;
     }
 
     /// <summary>
@@ -1153,30 +1192,32 @@ public class S3Golf : MonoBehaviour
             foreach (var goal in puzzle.UnlitGoals)
             {
                 Vector4 g = goal.position;
-                DrawMarker(S3.Lift(g, 2.1f / R), new Color(0.78f, 0.6f, 1f), $"{world.GroundDistance(player.Foot, g):0} m", "◆");
+                DrawMarker(S3.Lift(g, 2.1f / R), new Color(0.80f, 0.64f, 1f), $"{world.GroundDistance(player.Foot, g):0} m", S3Hud.Diamond);
             }
         if (ball == null) return;
-        DrawMarker(S3.Lift(Hole.cup, 2.9f / R), new Color(1f, 0.85f, 0.25f), $"{world.GroundDistance(player.ViewFrame().GetColumn(3), Hole.cup):0} m", "▼");
+        DrawMarker(S3.Lift(Hole.cup, 2.9f / R), S3Hud.Accent, $"{world.GroundDistance(player.ViewFrame().GetColumn(3), Hole.cup):0} m", S3Hud.Triangle);
         if (state == State.Ready && !exploring && Steepness > 0)
         {
-            var c = new Color(0.55f, 0.9f, 1f, Steepness);
-            DrawMarker(S3.Lift(-ball.Foot, 2.2f / R), c, $"over the pole: {world.GroundDistance(-ball.Foot, Hole.cup):0} m from the pin", "◎");
+            var c = new Color(S3Hud.Ice.r, S3Hud.Ice.g, S3Hud.Ice.b, Steepness);
+            DrawMarker(S3.Lift(-ball.Foot, 2.2f / R), c, $"Over the pole  ·  {world.GroundDistance(-ball.Foot, Hole.cup):0} m from the pin", S3Hud.Ring);
         }
         if (exploring && state != State.Sunk && followWeight < 0.5f && !gliding)   // no marker on the ball the camera is following
         {
             // the ball's marker says what it's doing, and pops when it comes to rest
             float d = world.GroundDistance(player.Foot, ball.Foot);
             bool resting = state == State.Ready;
-            string label = !resting ? (ball.grounded ? "rolling" : "in the air") : stopTime < 2.5f ? $"stopped · {d:0} m" : $"{d:0} m";
-            float pop = resting ? 1 + 0.7f * Mathf.Clamp01(1 - stopTime / 0.45f) : 0.8f;
-            DrawMarker(S3.Lift(ball.Foot, (ballRadius * 2 + 0.5f) / R), new Color(0.55f, 0.95f, 1f), label, "●", pop);
+            string label = !resting ? (ball.grounded ? "Rolling" : "In the air") : stopTime < 2.5f ? $"Stopped  ·  {d:0} m" : $"{d:0} m";
+            float pop = resting ? 1 + 0.6f * Mathf.Clamp01(1 - stopTime / 0.45f) : 0.85f;
+            DrawMarker(S3.Lift(ball.Foot, (ballRadius * 2 + 0.5f) / R), new Color(0.55f, 0.95f, 1f), label, S3Hud.Circle, pop);
         }
     }
 
-    bool HintVisible => puzzle != null && showHint && Time.realtimeSinceStartup < hintUntil && puzzle.Level != null && (ball == null || locked);
+    float hintBottom;   // where the hint card ended last frame (virtual pixels)
 
-    /// <summary>Big centre messages sit below the hint box while it's up.</summary>
-    float MessageY(float h) => HintVisible ? Mathf.Max(h * 0.22f, 176) : h * 0.22f;
+    bool HintVisible =>puzzle != null && showHint && Time.realtimeSinceStartup < hintUntil && puzzle.Level != null && (ball == null || locked);
+
+    /// <summary>Big centre messages sit below the hint card while it's up.</summary>
+    float MessageY(float h) => HintVisible ? Mathf.Max(h * 0.24f, hintBottom + 20) : h * 0.24f;
 
     /// <summary>Crosshair, pieces in hand, puzzle status and the level's hint.</summary>
     void DrawPuzzleHud(float w, float h)
@@ -1184,88 +1225,125 @@ public class S3Golf : MonoBehaviour
         bool onFoot = exploring && Cursor.lockState == CursorLockMode.Locked;
         if (onFoot && (ball == null || state != State.Finished))
         {
-            GUI.color = puzzle.HasTarget ? new Color(1f, 0.9f, 0.4f) : Color.white;
-            Shadowed(new Rect(w / 2 - 20, h / 2 - 17, 40, 34), "+", iconStyle);
-            GUI.color = Color.white;
+            Color c = puzzle.HasTarget ? S3Hud.Accent : new Color(1, 1, 1, 0.85f);
+            S3Hud.Icon(new Rect(w / 2 - 10, h / 2 - 10, 20, 20), S3Hud.Ring, c);
+            S3Hud.Icon(new Rect(w / 2 - 2.5f, h / 2 - 2.5f, 5, 5), S3Hud.Circle, c, false);
         }
         bool relevant = ball == null || locked || exploring;
-        if (relevant && (puzzle.Level?.mirrors > 0 || puzzle.Level?.diffractors > 0) && (ball == null || exploring))
+        if (relevant && puzzle.Level != null && (puzzle.Level.mirrors > 0 || puzzle.Level.diffractors > 0) && (ball == null || exploring))
         {
-            Shadowed(new Rect(0, h - 195, w, 26), puzzle.InventoryText, hintStyle);
-            Shadowed(new Rect(0, h - 165, w, 26), puzzle.StatusText, hintStyle);
+            DrawInventory(w / 2, h - 106);
+            S3Hud.Note(w / 2, h - 160, puzzle.StatusText, null, S3Hud.Small);
         }
-        if (HintVisible)
+        if (HintVisible) DrawLevelHint(w);
+    }
+
+    /// <summary>The pieces you have, as chips; the one in hand is highlighted.</summary>
+    void DrawInventory(float cx, float cy)
+    {
+        var items = new List<(string key, string name, int count, bool held)>();
+        if (puzzle.Level.mirrors > 0) items.Add(("1", "Mirror", puzzle.mirrorsLeft, puzzle.tool == S3Laser.Kind.Mirror));
+        if (puzzle.Level.diffractors > 0) items.Add(("2", "Diffractor", puzzle.diffractorsLeft, puzzle.tool == S3Laser.Kind.Diffractor));
+        const float gap = 10, pad = 14, height = 44;
+        float Width((string key, string name, int count, bool held) it) =>
+            pad + 24 + 10 + S3Hud.Measure(it.name, S3Hud.Body).x + 10 + S3Hud.Measure($"×{it.count}", S3Hud.BodyBold).x + pad;
+        float total = -gap;
+        foreach (var it in items) total += Width(it) + gap;
+        float x = cx - total / 2;
+        foreach (var it in items)
         {
-            float bw = Mathf.Min(820, w - 40), x = (w - bw) / 2;
-            GUI.color = new Color(0, 0, 0, 0.45f);
-            GUI.DrawTexture(new Rect(x - 10, 74, bw + 20, 92), Texture2D.whiteTexture);
-            GUI.color = Color.white;
-            GUI.Label(new Rect(x, 80, bw, 84), $"<b>{puzzle.Level.title}</b>   {puzzle.Level.hint}   <i>(H hides)</i>", wrapStyle);
+            float cw = Width(it);
+            var r = new Rect(x, cy - height / 2, cw, height);
+            if (it.held) S3Hud.Panel(r, new Color(S3Hud.Accent.r, S3Hud.Accent.g, S3Hud.Accent.b, 0.92f));
+            else S3Hud.Panel(r);
+            Color ink = it.held ? new Color(0.12f, 0.09f, 0.03f) : it.count > 0 ? S3Hud.Ink : S3Hud.Dim;
+            float tx = x + pad + S3Hud.Key(x + pad, cy, it.key) + 10;
+            float nw = S3Hud.Measure(it.name, S3Hud.Body).x;
+            S3Hud.Text(new Rect(tx, cy - 12, nw + 2, 24), it.name, S3Hud.Body, ink, false);
+            S3Hud.Text(new Rect(tx + nw + 10, cy - 12, 60, 24), $"×{it.count}", S3Hud.BodyBold, ink, false);
+            x += cw + gap;
         }
     }
 
-    static readonly string[] ControlLines =
+    /// <summary>The level's hint, on a card at the top.</summary>
+    void DrawLevelHint(float w)
     {
-        "Golf:   A/D or mouse aim  ·  W/S height (Shift fine)  ·  Space power, Space shoot  ·  Right-click cancel  ·  C level the view",
-        "Tab walk around  ·  E / F back to the ball  ·  B replay last spot (+1)  ·  R restart  ·  N start over",
-        "Laser:   click place / pick up  ·  Q/E turn  ·  1 / 2 or wheel switch piece  ·  H puzzle hint",
-        "Walking:   WASD, Shift run, Space jump  ·  M next map  ·  Esc free the mouse",
-        "Antipodes:   straight up at full power, a ball comes down 37.7 m away",
+        float bw = Mathf.Min(760, w - 48), x = (w - bw) / 2, y = 24, pad = 22;
+        float th = S3Hud.Wrap.CalcHeight(new GUIContent(puzzle.Level.hint), bw - 2 * pad);
+        var r = new Rect(x, y, bw, th + 82);
+        hintBottom = r.yMax;
+        S3Hud.Panel(r);
+        S3Hud.Text(new Rect(x + pad, y + 16, bw, 16), "PUZZLE", S3Hud.Eyebrow, S3Hud.Accent, false);
+        float kw = S3Hud.Measure("hide", S3Hud.Small).x;
+        S3Hud.Text(new Rect(x + bw - pad - kw, y + 14, kw + 2, 20), "hide", S3Hud.Small, S3Hud.Dim, false);
+        S3Hud.Key(x + bw - pad - kw - 32, y + 24, "H");
+        S3Hud.Text(new Rect(x + pad, y + 36, bw, 26), puzzle.Level.title, S3Hud.BodyBold, S3Hud.Ink, false);
+        S3Hud.Text(new Rect(x + pad, y + 64, bw - 2 * pad, th), puzzle.Level.hint, S3Hud.Wrap, new Color(1, 1, 1, 0.85f), false);
+    }
+
+    static readonly (string group, string keys)[] ControlLines =
+    {
+        ("Golf", "A/D or mouse aim  ·  W/S height (Shift fine)  ·  Space power, Space shoot  ·  Right-click cancel  ·  C level the view"),
+        ("Ball", "Tab walk around  ·  E / F back to the ball  ·  B replay last spot (+1)  ·  R restart  ·  N start over"),
+        ("Laser", "Click place / pick up  ·  Q/E turn  ·  1 / 2 or wheel switch piece  ·  H puzzle hint"),
+        ("Walking", "WASD, Shift run, Space jump  ·  M next map  ·  Esc free the mouse"),
+        ("Antipodes", "Straight up at full power, a ball comes down 37.7 m away"),
     };
 
     /// <summary>Every hole and puzzle, one column per map (the one you're on highlighted), and the controls.</summary>
     void DrawLevelSelect(float w, float h)
     {
-        GUI.color = new Color(0, 0, 0, 0.6f);
+        GUI.color = new Color(0.02f, 0.03f, 0.06f, 0.6f);
         GUI.DrawTexture(new Rect(0, 0, w, h), Texture2D.whiteTexture);
         GUI.color = Color.white;
-        float gap = 16, colW = Mathf.Min(340, (w - 40 - 2 * gap) / 3), rowH = 34, rowStep = rowH + 6, lineH = 22;
+        float gap = 20, colW = Mathf.Min(360, (w - 112 - 2 * gap) / 3), rowH = 42, rowStep = rowH + 8, lineH = 28;
         int rows = 0;
         foreach (var l in levelLabels) rows = Mathf.Max(rows, l.Length);
-        float levelsH = 90 + rows * rowStep, height = levelsH + 46 + ControlLines.Length * lineH + 44;
-        float x0 = (w - (3 * colW + 2 * gap)) / 2, y0 = Mathf.Max(16, (h - height) / 2);
-        Shadowed(new Rect(0, y0, w, 44), "Select Level", menuTitle);
+        float cardW = 3 * colW + 2 * gap + 64;
+        float levelsH = 96 + 32 + rows * rowStep;
+        float cardH = levelsH + 30 + 32 + ControlLines.Length * lineH + 64;
+        float x0 = (w - cardW) / 2, y0 = Mathf.Max(16, (h - cardH) / 2);
+        S3Hud.Panel(new Rect(x0, y0, cardW, cardH), 1.45f);
+        S3Hud.Text(new Rect(x0, y0 + 24, cardW, 56), "Select a level", S3Hud.Title, S3Hud.Ink, false);
         int current = world.HasGolf ? holeIndex : puzzleIndex;
         for (int m = 0; m < Maps.Length; m++)
         {
-            float x = x0 + m * (colW + gap), y = y0 + 56;
-            Shadowed(new Rect(x, y, colW, 28), MapTitle(Maps[m]), menuHeader);
-            y += 34;
+            float x = x0 + 32 + m * (colW + gap), y = y0 + 96;
+            S3Hud.Text(new Rect(x + 2, y, colW, 18), MapTitle(Maps[m]).ToUpperInvariant(), S3Hud.Eyebrow, S3Hud.Accent, false);
+            y += 32;
             for (int i = 0; i < levelLabels[m].Length; i++, y += rowStep)
-            {
-                bool here = Maps[m] == world.biome && i == current;
-                GUI.backgroundColor = GUI.contentColor = here ? new Color(1f, 0.85f, 0.3f) : Color.white;
-                string label = levelLabels[m][i];
-                var style = menuButton.CalcSize(new GUIContent(label)).x > colW ? menuButtonSmall : menuButton;
-                if (GUI.Button(new Rect(x, y, colW, rowH), label, style))
+                if (S3Hud.Button(new Rect(x, y, colW, rowH), levelLabels[m][i], Maps[m] == world.biome && i == current))
                 {
-                    GUI.backgroundColor = GUI.contentColor = Color.white;
                     JumpTo(Maps[m], i);
                     return;
                 }
-            }
         }
-        GUI.backgroundColor = GUI.contentColor = Color.white;
-        float cy = y0 + levelsH + 12;
-        Shadowed(new Rect(0, cy, w, 28), "Controls", menuHeader);
-        cy += 34;
-        foreach (var line in ControlLines) { Shadowed(new Rect(0, cy, w, lineH), line, menuControls); cy += lineH; }
-        Shadowed(new Rect(0, cy + 14, w, 28), "Click a level to play it  ·  L or Esc to close", hintStyle);
+        float cy = y0 + levelsH + 30;
+        S3Hud.Text(new Rect(x0 + 34, cy, cardW, 18), "CONTROLS", S3Hud.Eyebrow, S3Hud.Accent, false);
+        cy += 32;
+        foreach (var (group, keys) in ControlLines)
+        {
+            S3Hud.Text(new Rect(x0 + 34, cy, 120, lineH), group, S3Hud.BodyBold, S3Hud.Ink, false);
+            S3Hud.Text(new Rect(x0 + 154, cy, cardW - 180, lineH), keys, S3Hud.Small, S3Hud.Dim, false);
+            cy += lineH;
+        }
+        S3Hud.Centered(w / 2, y0 + cardH - 30, "Click a level to play it   ·   L or Esc to close", S3Hud.Small, S3Hud.Dim);
     }
 
-    void DrawMarker(Vector4 target, Color color, string label, string icon, float scale = 1)
+    void DrawMarker(Vector4 target, Color color, string label, Texture2D icon, float scale = 1)
     {
         if (!cam) cam = player.GetComponent<Camera>();
         Matrix4x4 frame = player.ViewFrame();
         Vector4 q = Matrix4x4.Scale(new Vector3(1, 1, -1)) * frame.transpose * target;
         var dir = new Vector3(q.x, q.y, -q.z);          // Unity camera space: +z forward
-        float w = Screen.width, h = Screen.height, m = 24;
+        // markers stay below the cards along the top (the hint card's bottom is last frame's)
+        float k = S3Hud.Scale, w = S3Hud.Width, h = S3Hud.Height, m = 40, top = Mathf.Max(locked ? 196 : 152, HintVisible ? hintBottom + 14 : 0);
         Vector2 c = new Vector2(w / 2, h / 2), p;
         bool onScreen = false;
         if (dir.z > 1e-4f)
         {
             Vector3 sp = cam.WorldToScreenPoint(cam.transform.TransformPoint(dir.normalized * 10f));
-            p = new Vector2(sp.x, h - sp.y);
+            p = new Vector2(sp.x / k, (Screen.height - sp.y) / k);
             onScreen = p.x > m && p.x < w - m && p.y > m && p.y < h - m;
         }
         else p = c + new Vector2(dir.x, -dir.y).normalized * 1e4f;   // behind: push towards its side
@@ -1275,21 +1353,11 @@ public class S3Golf : MonoBehaviour
             if (v.sqrMagnitude < 1e-6f) v = Vector2.up;
             float s = Mathf.Min((w / 2 - m) / Mathf.Max(Mathf.Abs(v.x), 1e-4f), (h / 2 - m) / Mathf.Max(Mathf.Abs(v.y), 1e-4f));
             p = c + v * s;
+            p.y = Mathf.Min(p.y, h - 120);
         }
-        GUI.color = color;
-        iconStyle.fontSize = Mathf.RoundToInt(28 * scale);
-        Shadowed(new Rect(p.x - 40, p.y - 32, 80, 54), icon, iconStyle);
-        iconStyle.fontSize = 28;
-        GUI.color = Color.white;
-        Shadowed(new Rect(p.x - 80, p.y + 10, 160, 22), label, markerStyle);
-    }
-
-    static void Shadowed(Rect r, string text, GUIStyle style)
-    {
-        var c = GUI.color;
-        GUI.color = new Color(0, 0, 0, 0.75f * c.a);
-        GUI.Label(new Rect(r.x + 2, r.y + 2, r.width, r.height), text, style);
-        GUI.color = c;
-        GUI.Label(r, text, style);
+        p.y = Mathf.Max(p.y, top);
+        float size = 24 * scale;
+        S3Hud.Icon(new Rect(p.x - size / 2, p.y - size / 2, size, size), icon, color);
+        S3Hud.Tag(p.x, p.y + size / 2 + 6, label, new Color(1, 1, 1, color.a));
     }
 }

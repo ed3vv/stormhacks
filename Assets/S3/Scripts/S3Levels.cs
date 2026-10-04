@@ -274,7 +274,7 @@ public static class S3Levels
                 // sends out gathers again on the sealed crystal, its ground rays converging like a starburst, 30°
                 // apart and lined up with the light that hit it. The second crystal's slot faces along one spoke of
                 // that starburst only if the beam comes in at the right angle, which depends on where the mirror
-                // stands: 12 spots round the laser's line, each a metre or so long.
+                // stands: 12 windows round the laser's line.
                 Vector4 gs = origin, gsn = Heading(0, gs);
                 Vector4 sd = Heading(40, gs), gc = S3.Walk(gs, sd, .42f), away = Along(gs, sd, .42f);
                 Vector4 e = Spot(-.6f, 0), ef = Heading(90, e), d = -gs;
@@ -288,7 +288,7 @@ public static class S3Levels
                 level.blocks.AddRange(Pen(gs, gsn, .085f, 0, 1, 2, 3));
                 level.blocks.Add(Block.Goal(gc, away, R));
                 level.blocks.AddRange(Pen(gc, away, .075f, 1, 2, 3));
-                level.blocks.AddRange(Slot(gc, away, .075f, .02f, .285f));
+                level.blocks.AddRange(Slot(gc, away, .075f, .06f, .17f));   // a wide, short nozzle: a few degrees of slack
                 level.blocks.Add(Block.Emitter(e, ef, R));
                 level.mirrors = 1;
                 level.diffractors = 1;
