@@ -1,37 +1,20 @@
 // The map: the ground great-sphere and the low-poly props that dress it - houses, trees, rocks,
 // mushrooms and grass, in the style of Hyperbolica. Ported from the Unity build's S3Scenery.
 //
-// Each prop is authored in plain local metres, placed on the ground great-sphere by a frame, and
-// baked into one shared mesh. The solid ones also report themselves as vertical cylinders, which
-// is what the player and the ball actually collide with.
+// What stands where comes from layout.js by way of placement.js; this module only turns each
+// resolved prop into triangles. Each prop is authored in plain local metres, placed on the ground
+// great-sphere by a frame, and baked into one shared mesh. The solid ones also report themselves
+// as vertical cylinders, which is what the player and the ball actually collide with.
 import { MeshBuilder, MeshData, bakeLocal, shade } from './mesh-builder.js';
-import { BALL_RADIUS, GREEN_RADIUS, HOLES } from '../game/golf/course.js';
-import { WORLD_RADIUS, column, directionTo, distance, groundFrame, isZero, walk } from '../core/s3.js';
+import { BALL_RADIUS } from '../game/golf/course.js';
+import { houseShape, propSize, randomSource, resolveLayout } from '../game/golf/placement.js';
+import { WORLD_RADIUS, column, groundFrame } from '../core/s3.js';
 
 const R = WORLD_RADIUS;
 const WALL = [0.60, 0.47, 0.38], WALL_EDGE = [0.45, 0.34, 0.27];
 const ROOF = [0.86, 0.10, 0.08], ROOF_EDGE = [0.62, 0.06, 0.05];
 const PANE = [0.98, 0.88, 0.36], FRAME = [0.26, 0.21, 0.18];
 const DOOR = [0.62, 0.63, 0.66], CHIMNEY = [0.40, 0.38, 0.38], BARK = [0.42, 0.29, 0.19];
-
-// Houses at fixed spots; the last is well past the equator, so watch it grow as you walk away.
-const HOUSES = [
-  { x: 7, z: 12, yaw: 200, style: 0 },
-  { x: -12, z: -3, yaw: 75, style: 1 },
-  { x: 11, z: -11, yaw: -35, style: 2 },
-  { x: -21, z: -14, yaw: 130, style: 0 },
-];
-
-// Deterministic so the world is identical on every load, like Unity's seeded System.Random.
-function randomSource(seed) {
-  let state = seed >>> 0;
-  return () => {
-    state = (state + 0x6d2b79f5) >>> 0;
-    let t = Math.imul(state ^ (state >>> 15), 1 | state);
-    t = (t + Math.imul(t ^ (t >>> 7), 61 | t)) ^ t;
-    return ((t ^ (t >>> 14)) >>> 0) / 4294967296;
-  };
-}
 
 // ------------------------------------------------------------------ ground
 
@@ -143,85 +126,58 @@ function tuft(mb, random) {
 
 // ------------------------------------------------------------------ world assembly
 
-function tryPlace(random, keepOut, radius, attempts = 40) {
-  for (let a = 0; a < attempts; a++) {
-    // uniform on the ground sphere: cos(distance) is uniform
-    const d = Math.acos(1 - 2 * random()) * R, theta = 2 * Math.PI * random();
-    const frame = groundFrame(d * Math.cos(theta), d * Math.sin(theta), 2 * Math.PI * random(), R);
-    const foot = column(frame, 3);
-    if (keepOut.every(k => distance(foot, k.point) * R >= k.radius + radius)) return frame;
+function propMesh(prop) {
+  const random = randomSource(prop.seed);
+  switch (prop.type) {
+    case 'house': {
+      const mb = new MeshBuilder();
+      const { width, depth, wallHeight, rise } = houseShape(prop.style);
+      house(mb, width, depth, wallHeight, rise);
+      return mb;
+    }
+    case 'tree': {
+      const mb = new MeshBuilder();
+      if (prop.variant === 'pine') pineTree(mb, random, prop.scale); else roundTree(mb, random, prop.scale);
+      return mb;
+    }
+    case 'rock': {
+      const mb = new MeshBuilder(0.6), g = 0.72 + 0.12 * random(), size = prop.size;
+      mb.icosphere([0, size * 0.35, 0], [size, size * 0.7, size * 0.9], 1, [g, g, g * 0.98], random, 0.18);
+      return mb;
+    }
+    case 'mushroom': {
+      const mb = new MeshBuilder();
+      for (let k = 0, n = 1 + Math.floor(random() * 3); k < n; k++) {
+        const o = [(random() - 0.5) * 0.5, 0, (random() - 0.5) * 0.5], s = 0.7 + 0.6 * random();
+        mb.frustum(o, 0.05 * s, 0.04 * s, 0.22 * s, 6, [0.95, 0.92, 0.85]);
+        mb.frustum([o[0], o[1] + 0.2 * s, o[2]], 0.17 * s, 0, 0.13 * s, 7, [0.88, 0.12, 0.1]);
+      }
+      return mb;
+    }
+    default:
+      return null;
   }
-  return null;
 }
 
 /** Builds the scenery mesh and the obstacle list that the player and the ball collide with. */
-export function buildScenery(seed) {
-  const random = randomSource(seed);
+export function buildScenery(layout) {
+  const { props, grass } = resolveLayout(layout);
   const mesh = new MeshData();
   const obstacles = [];
-  const keepOut = [];
 
-  for (const hole of HOLES) {
-    keepOut.push({ point: hole.tee, radius: 3 }, { point: hole.cup, radius: GREEN_RADIUS + 1 });
-    // keep a fairway clear along the geodesic from tee to cup
-    const span = distance(hole.tee, hole.cup), heading = directionTo(hole.tee, hole.cup);
-    if (isZero(heading)) continue;
-    for (let s = 0; s < span * R; s += 1.5) keepOut.push({ point: walk(hole.tee, heading, s / R), radius: 1.4 });
+  for (const prop of props) {
+    const builder = propMesh(prop);
+    if (!builder) continue;
+    const frame = groundFrame(prop.x, prop.z, prop.yaw * Math.PI / 180, R);
+    mesh.append(builder, frame, R);
+    const { obstacle } = propSize(prop);
+    if (obstacle) obstacles.push({ foot: column(frame, 3), ...obstacle });
   }
 
-  for (const spec of HOUSES) {
-    const frame = groundFrame(spec.x, spec.z, spec.yaw * Math.PI / 180, R);
-    const mb = new MeshBuilder();
-    const width = 4.2 + spec.style * 0.5, depth = 5 + spec.style * 0.4;
-    const wallHeight = 2.8 + spec.style * 0.3, rise = 1.9;
-    house(mb, width, depth, wallHeight, rise);
-    mesh.append(mb, frame, R);
-    const foot = column(frame, 3), footprint = 0.5 * Math.hypot(width, depth);
-    obstacles.push({ foot, radius: footprint * 0.9, height: wallHeight + rise });
-    keepOut.push({ point: foot, radius: footprint + 1.5 });
-  }
-
-  for (let i = 0; i < 34; i++) {
-    const frame = tryPlace(random, keepOut, 1.8);
-    if (!frame) continue;
-    const mb = new MeshBuilder(), scale = 0.8 + 0.5 * random();
-    if (random() < 0.65) roundTree(mb, random, scale); else pineTree(mb, random, scale);
-    mesh.append(mb, frame, R);
-    const foot = column(frame, 3);
-    obstacles.push({ foot, radius: 0.3 * scale, height: 6 });
-    keepOut.push({ point: foot, radius: 1.6 * scale });
-  }
-
-  for (let i = 0; i < 22; i++) {
-    const size = 0.35 + 1.1 * random() * random();
-    const frame = tryPlace(random, keepOut, size + 0.5);
-    if (!frame) continue;
-    const mb = new MeshBuilder(0.6), g = 0.72 + 0.12 * random();
-    mb.icosphere([0, size * 0.35, 0], [size, size * 0.7, size * 0.9], 1, [g, g, g * 0.98], random, 0.18);
-    mesh.append(mb, frame, R);
-    const foot = column(frame, 3);
-    obstacles.push({ foot, radius: size * 0.85, height: size });
-    keepOut.push({ point: foot, radius: size + 0.3 });
-  }
-
-  for (let i = 0; i < 26; i++) {
-    const frame = tryPlace(random, keepOut, 0.4);
-    if (!frame) continue;
-    const mb = new MeshBuilder();
-    for (let k = 0, n = 1 + Math.floor(random() * 3); k < n; k++) {
-      const o = [(random() - 0.5) * 0.5, 0, (random() - 0.5) * 0.5], s = 0.7 + 0.6 * random();
-      mb.frustum(o, 0.05 * s, 0.04 * s, 0.22 * s, 6, [0.95, 0.92, 0.85]);
-      mb.frustum([o[0], o[1] + 0.2 * s, o[2]], 0.17 * s, 0, 0.13 * s, 7, [0.88, 0.12, 0.1]);
-    }
-    mesh.append(mb, frame, R);
-  }
-
-  for (let i = 0; i < 1100; i++) {
-    const frame = tryPlace(random, keepOut, 0.2, 4);
-    if (!frame) continue;
+  for (const blade of grass) {
     const mb = new MeshBuilder(1);
-    tuft(mb, random);
-    mesh.append(mb, frame, R);
+    tuft(mb, randomSource(blade.seed));
+    mesh.append(mb, groundFrame(blade.x, blade.z, blade.yaw * Math.PI / 180, R), R);
   }
   return { mesh: mesh.toBuffers(), obstacles };
 }

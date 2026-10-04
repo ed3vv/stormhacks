@@ -11,11 +11,12 @@ import {
 } from '../../core/s3.js';
 
 const R = WORLD_RADIUS;
-export const GRAVITY = 9.81;
-const RESTITUTION = 0.42;
-const BOUNCE_GRIP = 0.8;      // fraction of tangential speed kept through a bounce
-const BOUNCE_SPEED = 0.9;     // below this normal speed the ball rolls instead of bouncing
-const AIR_DRAG = 0.06;        // per second
+// Everything is quoted as a multiple of the world radius, which is how the Unity build tunes it.
+export const GRAVITY = 1.32 * R;
+const RESTITUTION = 0.38;
+const BOUNCE_GRIP = 0.9;          // fraction of tangential speed kept through a bounce
+const BOUNCE_SPEED = 0.14 * R;    // below this normal speed the ball rolls instead of bouncing
+const AIR_DRAG = 0.035;           // per second
 
 export class Ball {
   constructor() { this.radius = BALL_RADIUS; this.velocity = ZERO; this.lastUp = EY; this.place(EW); }

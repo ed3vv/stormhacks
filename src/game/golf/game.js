@@ -12,9 +12,8 @@ import { Renderer } from '../../graphics/renderer.js';
 import { buildScenery } from '../../graphics/scenery.js';
 import { Ball, GRAVITY } from './ball.js';
 import { Player } from './player.js';
-import {
-  BALL_RADIUS, CLUB, CUP_RADIUS, GREEN_RADIUS, HOLES, SCENERY_SEED, TOTAL_PAR, groundDistance,
-} from './course.js';
+import { LAYOUT } from './layout.js';
+import { BALL_RADIUS, CUP_RADIUS, HOLES, TOTAL_PAR, groundDistance, launchSpeed } from './course.js';
 import {
   EY, EZ, WORLD_RADIUS, clamp, column, directionTo, distance, dot, foot, frameAt, height, isZero,
   lift, mix, multiply, ortho, planeRotation, scale, upAt, walk,
@@ -22,11 +21,10 @@ import {
 
 const R = WORLD_RADIUS;
 const STEP = 1 / 240;
-const FAIRWAY_FRICTION = 1.7;      // rolling deceleration, m/s^2
-const GREEN_FRICTION = 0.85;
-const SINK_SPEED = 3.5;            // faster than this and the ball skips over the cup
+const ROLL_FRICTION = 0.54 * R;    // rolling deceleration, m/s^2
 const REACH = 2.6;                 // how close you must be to swing
 const MIN_ANGLE = 2, MAX_ANGLE = 90, START_ANGLE = 20, AIM_DEGREES_PER_PIXEL = 0.12;
+const AIM_PITCH_LOW = -0.45, AIM_PITCH_HIGH = 1.05;   // camera pitch at the flattest and steepest loft
 const LEASH = 4.5;                 // the flight camera trails the ball at most this far
 const FOLLOW_MIN_HEIGHT = 1.2;
 const FOLLOW_TRIGGER_HEIGHT = 2.5; // only shots that climb this high take the camera
@@ -39,7 +37,7 @@ const pingPong = t => { const l = t - Math.floor(t / 2) * 2; return 1 - Math.abs
 const smoothStep = t => t * t * (3 - 2 * t);
 
 export function createGolfGame(canvas) {
-  const { mesh, obstacles } = buildScenery(SCENERY_SEED);
+  const { mesh, obstacles } = buildScenery(LAYOUT);
   const renderer = new Renderer(canvas, mesh);
   const hud = createHud();
   const input = createInput(canvas);
@@ -57,20 +55,32 @@ export function createGolfGame(canvas) {
 
   const hole = () => HOLES[holeIndex];
   const nearBall = () => groundDistance(player.foot, ball.foot) < REACH;
-  const onGreen = point => distance(point, hole().cup) * R < GREEN_RADIUS;
   const shotDirection = () => ortho(player.forward, ball.position, upAt(ball.position));
-  const shotSpeed = p => lerp(0.04, 1, p) * CLUB.maxSpeed;
-  /** Camera pitch for the current launch height: tilts up a little, keeping the ball in view. */
-  const aimPitch = () => lerp(-0.45, -0.32, inverseLerp(MIN_ANGLE, MAX_ANGLE, aimAngle));
+  /**
+   * Camera pitch for the current launch height. It stays low and keeps the ball in view for the
+   * flat shots you play most of the time, then swings back hard towards the top of the dial so a
+   * near-vertical shot is actually aimed at something you can see: at 90 degrees the pole of the
+   * hemisphere, straight up from the ball, sits inside the top of the frame.
+   */
+  const aimPitch = () => {
+    const t = inverseLerp(MIN_ANGLE, MAX_ANGLE, aimAngle);
+    return lerp(AIM_PITCH_LOW, AIM_PITCH_HIGH, t * t);
+  };
   const say = (text, seconds) => { message = text; messageUntil = clock + seconds; };
 
-  /**
-   * Meter position that just carries a vertical shot over the pole: energy for the climb of
-   * pi/2 * R, plus about 3.6 % for air drag.
+/**
+   * Meter position whose shot just carries straight up over the pole: the climb of pi/2 * R plus
+   * a little for air drag, solved against the launch curve. Over 1 when the meter cannot reach it.
    */
   function poleCrossingPower() {
-    const v = Math.sqrt(2 * GRAVITY * (POLE_HEIGHT - BALL_RADIUS)) * 1.036;
-    return inverseLerp(0.04, 1, v / CLUB.maxSpeed) + (v > CLUB.maxSpeed ? 1 : 0);
+    const need = Math.sqrt(2 * GRAVITY * (POLE_HEIGHT - BALL_RADIUS)) * 1.02;
+    if (launchSpeed(1) < need) return 2;
+    let low = 0, high = 1;
+    for (let i = 0; i < 30; i++) {
+      const mid = (low + high) / 2;
+      if (launchSpeed(mid) < need) low = mid; else high = mid;
+    }
+    return high;
   }
 
   function startHole(index) {
@@ -125,7 +135,7 @@ export function createGolfGame(canvas) {
 
   function shoot(p) {
     lastShot = ball.foot;
-    ball.launch(shotDirection(), shotSpeed(p), aimAngle * Math.PI / 180);
+    ball.launch(shotDirection(), launchSpeed(p), aimAngle * Math.PI / 180);
     strokes++; total++;
     state = 'moving';
     moveTime = accumulator = 0;
@@ -137,12 +147,13 @@ export function createGolfGame(canvas) {
     moveTime += dt;
     while (accumulator >= STEP) {
       accumulator -= STEP;
-      ball.step(STEP, onGreen(ball.foot) ? GREEN_FRICTION : FAIRWAY_FRICTION, obstacles);
+      ball.step(STEP, ROLL_FRICTION, obstacles);
       shotMaxHeight = Math.max(shotMaxHeight, ball.heightM - BALL_RADIUS);
       groundedTime = ball.grounded ? groundedTime + STEP : 0;
 
+      // the cup takes the ball whenever it rolls or lands in it; there is no lip-out
       const toCup = distance(ball.foot, hole().cup) * R;
-      if (toCup < CUP_RADIUS && ball.heightM < BALL_RADIUS * 1.6 && ball.speed < SINK_SPEED) {
+      if (toCup < CUP_RADIUS && ball.heightM < BALL_RADIUS * 1.3) {
         state = 'sunk';
         sunkTimer = 3;
         const over = strokes - hole().par;
@@ -290,9 +301,9 @@ export function createGolfGame(canvas) {
 
     hud.update({
       hole: holeIndex + 1, holes: HOLES.length, par: hole().par, strokes, total,
-      club: CLUB.name, pin: groundDistance(ball.foot, hole().cup), pole: POLE_HEIGHT,
+      pin: groundDistance(ball.foot, hole().cup), pole: POLE_HEIGHT,
       hint: hint(), message: clock < messageUntil ? message : '',
-      aiming, aimAngle, charging, power, shotSpeed: shotSpeed(power), poleMark: poleCrossingPower(),
+      aiming, aimAngle, charging, power, shotSpeed: launchSpeed(power), poleMark: poleCrossingPower(),
     });
     if (now - statsTime >= 250) { hud.setFps(frames, now - statsTime); statsTime = now; frames = 0; }
     animationFrame = requestAnimationFrame(frame);

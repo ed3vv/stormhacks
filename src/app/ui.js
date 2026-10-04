@@ -39,7 +39,7 @@ export function createHud() {
     },
     update(view) {
       set(nodes.scoreline, `Hole ${view.hole}/${view.holes}   Par ${view.par}   Strokes ${view.strokes}   Total ${view.total}`);
-      set(nodes.clubline, `Club: ${view.club}      Pin: ${view.pin.toFixed(1)} m      Pole: ${view.pole.toFixed(1)} m straight up`);
+      set(nodes.clubline, `Pin: ${view.pin.toFixed(1)} m      Pole: ${view.pole.toFixed(1)} m straight up`);
       set(nodes.hint, view.hint);
       set(nodes.message, view.message);
 
@@ -48,7 +48,7 @@ export function createHud() {
 
       nodes.meter.hidden = !view.charging;
       if (view.charging) {
-        set(nodes['meter-label'], `${view.club}  ${view.shotSpeed.toFixed(1)} m/s`);
+        set(nodes['meter-label'], `${view.shotSpeed.toFixed(1)} m/s`);
         nodes['meter-fill'].style.width = `${view.power * 100}%`;
         nodes['meter-fill'].style.background = `rgb(${MIX([77, 230, 77], [255, 64, 38], view.power).join(' ')})`;
         // where the meter has to reach for a vertical shot to crest the pole

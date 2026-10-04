@@ -1,0 +1,491 @@
+<!doctype html>
+<html lang="en">
+<head>
+<meta charset="utf-8">
+<meta name="viewport" content="width=device-width,initial-scale=1">
+<title>Map editor · Minigames in Spherical Geometry</title>
+<style>
+  :root { color-scheme: dark; }
+  * { box-sizing: border-box; }
+  html, body { margin: 0; height: 100%; overflow: hidden; background: #0b0f1a; color: #e8ecf8;
+               font: 13px/1.45 ui-monospace, SFMono-Regular, Menlo, monospace; }
+  #app { display: grid; grid-template-columns: 1fr 310px; height: 100%; }
+  canvas { display: block; width: 100%; height: 100%; cursor: crosshair; }
+  #side { border-left: 1px solid #222c45; background: #0e1424; overflow-y: auto; padding: 14px; display: grid; gap: 13px; align-content: start; }
+  h2 { margin: 0; font-size: 12px; letter-spacing: .09em; text-transform: uppercase; color: #7e8cb8; }
+  .tools { display: flex; flex-wrap: wrap; gap: 6px; }
+  button { padding: 6px 10px; border: 1px solid #2c3550; border-radius: 6px; background: #1b2338; color: #e8ecf8; font: inherit; cursor: pointer; }
+  button:hover { background: #26304d; }
+  button.on { background: #4a6cff; border-color: #4a6cff; }
+  .row { display: grid; grid-template-columns: 86px 1fr; gap: 6px; align-items: center; margin-top: 5px; }
+  input { width: 100%; padding: 4px 6px; border: 1px solid #2c3550; border-radius: 5px; background: #121a2e; color: #e8ecf8; font: inherit; }
+  .note { color: #8d99bd; margin: 6px 0 0; }
+  .warn { color: #ffd38a; background: #3a2d12; border: 1px solid #6b5420; border-radius: 6px; padding: 7px 9px; }
+  .good { color: #9be89b; }
+  .wide { width: 100%; margin-top: 8px; }
+  hr { border: 0; border-top: 1px solid #222c45; margin: 0; }
+</style>
+</head>
+<body>
+<div id="app">
+  <canvas id="map"></canvas>
+  <div id="side">
+    <div>
+      <h2>Tool</h2>
+      <div class="tools" id="tools"></div>
+    </div>
+    <hr>
+    <div>
+      <h2>Selection</h2>
+      <div id="panel"><p class="note">Click a marker to select it. Drag to move.</p></div>
+    </div>
+    <hr>
+    <div>
+      <h2>Scatter</h2>
+      <div id="scatter"></div>
+    </div>
+    <hr>
+    <div>
+      <h2>Save</h2>
+      <p id="server" class="note">Checking the server…</p>
+      <div class="tools">
+        <button id="save">Save to layout.js</button>
+        <button id="copy">Copy</button>
+        <button id="download">Download</button>
+        <button id="revert">Revert</button>
+      </div>
+      <p class="note" id="status">Save writes src/game/golf/layout.js directly — needs the project's own dev server (<code>npm run dev</code>). On any other server it falls back to a download.</p>
+    </div>
+    <hr>
+    <p class="note">
+      This is the exponential-map chart of the ground sphere. Distance from the centre is true
+      metres and every straight line through the centre is a geodesic, but the whole world is the
+      disk, and its entire rim is <strong>one point</strong> &mdash; the centre's antipode. The map
+      stretches sideways as you approach that rim, so two props that look far apart out there are
+      actually close together. The dashed ring is the equator, a quarter lap out, where things look
+      largest from the centre.
+    </p>
+    <p class="note">Drag empty space to pan &middot; scroll to zoom &middot; Delete removes the selection.</p>
+  </div>
+</div>
+<script type="module">
+import { LAYOUT } from './src/game/golf/layout.js';
+import { resolveLayout, propSize, houseShape, MAP_RADIUS, GREEN_RADIUS } from './src/game/golf/placement.js';
+import { WORLD_RADIUS, distance, groundPoint } from './src/core/s3.js';
+
+const R = WORLD_RADIUS;
+const COLORS = { house: '#c9705c', tree: '#4f9d4a', rock: '#9aa2ab', mushroom: '#d8604f' };
+const DEFAULTS = { yaw: 0, style: 0, scale: 1, size: 0.8, variant: 'round' };
+const round = v => Math.round(v * 10) / 10;
+const withDefaults = prop => ({ ...DEFAULTS, ...prop });
+
+const original = structuredClone(LAYOUT);
+let layout = structuredClone(LAYOUT);
+let scattered = [], grass = [];
+let tool = 'select';
+let selection = null;                 // { kind: 'prop' | 'tee' | 'cup', index }
+let drag = null;
+let metresPerPixel = 9, centre = { x: 0, z: 0 };
+
+const canvas = document.getElementById('map');
+const context = canvas.getContext('2d');
+let ratio = 1, scale = 9;
+
+const toScreen = (x, z) => [canvas.width / 2 + (x - centre.x) * scale, canvas.height / 2 - (z - centre.z) * scale];
+const toWorld = (px, pz) => [(px - canvas.width / 2) / scale + centre.x, -(pz - canvas.height / 2) / scale + centre.z];
+const eventWorld = event => toWorld(event.offsetX * (canvas.width / canvas.clientWidth), event.offsetY * (canvas.height / canvas.clientHeight));
+
+/** Re-runs the scatter. Only needed when the holes, the hand-placed props or the seed change. */
+function resolve() {
+  const result = resolveLayout(layout);
+  scattered = result.props.slice(layout.props.length);
+  grass = result.grass;
+  draw();
+}
+
+// ------------------------------------------------------------------ drawing
+
+function circle(x, z, metres, stroke, fill) {
+  const [px, pz] = toScreen(x, z);
+  context.beginPath();
+  context.arc(px, pz, Math.max(1.5, metres * scale), 0, 2 * Math.PI);
+  if (fill) { context.fillStyle = fill; context.fill(); }
+  if (stroke) { context.strokeStyle = stroke; context.stroke(); }
+}
+
+function drawProp(prop, alpha) {
+  const full = withDefaults(prop);
+  const { obstacle } = propSize(full);
+  context.globalAlpha = alpha;
+  circle(full.x, full.z, obstacle ? obstacle.radius : 0.3, '#00000077', COLORS[full.type] || '#8891a8');
+  if (full.type === 'house') {
+    const { width, depth } = houseShape(full.style);
+    const [px, pz] = toScreen(full.x, full.z);
+    context.save();
+    context.translate(px, pz);
+    context.rotate(full.yaw * Math.PI / 180);
+    context.strokeStyle = '#ffd9c8';
+    context.strokeRect(-width / 2 * scale, -depth / 2 * scale, width * scale, depth * scale);
+    context.beginPath();                                  // a nose marking the front (-z) face
+    context.moveTo(0, 0);
+    context.lineTo(0, depth * 0.8 * scale);
+    context.stroke();
+    context.restore();
+  }
+  context.globalAlpha = 1;
+}
+
+function draw() {
+  ratio = Math.min(devicePixelRatio || 1, 2);
+  canvas.width = canvas.clientWidth * ratio;
+  canvas.height = canvas.clientHeight * ratio;
+  scale = metresPerPixel * ratio;
+  context.fillStyle = '#0b0f1a';
+  context.fillRect(0, 0, canvas.width, canvas.height);
+  context.lineWidth = ratio;
+  context.font = `${11 * ratio}px ui-monospace, monospace`;
+
+  // the world: a disk of radius pi * R, with a 5 m grid clipped to it
+  const [ox, oz] = toScreen(0, 0);
+  context.save();
+  context.beginPath();
+  context.arc(ox, oz, MAP_RADIUS * scale, 0, 2 * Math.PI);
+  context.clip();
+  context.fillStyle = '#12201a';
+  context.fillRect(0, 0, canvas.width, canvas.height);
+  context.strokeStyle = '#1b2d22';
+  context.beginPath();
+  for (let g = -40; g <= 40; g += 5) {
+    const [gx] = toScreen(g, 0), [, gz] = toScreen(0, g);
+    context.moveTo(gx, 0); context.lineTo(gx, canvas.height);
+    context.moveTo(0, gz); context.lineTo(canvas.width, gz);
+  }
+  context.stroke();
+  context.restore();
+
+  for (const metres of [10, 20, 30]) circle(0, 0, metres, '#25402d');
+  context.setLineDash([6 * ratio, 5 * ratio]);
+  circle(0, 0, Math.PI * R / 2, '#5d7a4e');
+  context.setLineDash([]);
+  circle(0, 0, MAP_RADIUS, '#7a6038');
+  context.fillStyle = '#7a6038';
+  context.fillText('antipode — the whole rim is one point', ...toScreen(0.8, MAP_RADIUS + 1.4));
+  context.fillStyle = '#5d7a4e';
+  context.fillText('equator', ...toScreen(0.8, Math.PI * R / 2 + 1.4));
+
+  context.globalAlpha = 0.3;
+  for (const blade of grass) circle(blade.x, blade.z, 0.1, null, '#2f5f33');
+  context.globalAlpha = 1;
+  for (const prop of scattered) drawProp(prop, 0.5);
+
+  for (const [index, hole] of layout.holes.entries()) {
+    const [tx, tz] = toScreen(...hole.tee), [cx, cz] = toScreen(...hole.cup);
+    context.strokeStyle = '#d9c25f88';
+    context.lineWidth = 2 * ratio;
+    context.beginPath(); context.moveTo(tx, tz); context.lineTo(cx, cz); context.stroke();
+    context.lineWidth = ratio;
+    circle(hole.cup[0], hole.cup[1], GREEN_RADIUS, '#7ddc7a55', '#7ddc7a1e');
+    circle(hole.cup[0], hole.cup[1], 0.55, '#0b0f1a', '#f2f4ff');
+    circle(hole.tee[0], hole.tee[1], 0.55, '#0b0f1a', '#d9c25f');
+    context.fillStyle = '#cfd6ee';
+    context.fillText(`${index + 1} tee`, tx + 9 * ratio, tz - 7 * ratio);
+    context.fillText(`${index + 1} cup · par ${hole.par}`, cx + 9 * ratio, cz - 7 * ratio);
+  }
+
+  for (const prop of layout.props) drawProp(prop, 1);
+
+  const chosen = selectedSpot();
+  if (chosen) { context.lineWidth = 2 * ratio; circle(chosen[0], chosen[1], 1.5, '#5b86ff'); context.lineWidth = ratio; }
+}
+
+// ------------------------------------------------------------------ selection
+
+function selectedSpot() {
+  if (!selection) return null;
+  if (selection.kind === 'prop') { const p = layout.props[selection.index]; return [p.x, p.z]; }
+  const hole = layout.holes[selection.index];
+  return selection.kind === 'tee' ? hole.tee : hole.cup;
+}
+
+function pick(x, z) {
+  const reach = 11 / scale;
+  for (const [index, hole] of layout.holes.entries()) {
+    if (Math.hypot(hole.tee[0] - x, hole.tee[1] - z) < reach) return { kind: 'tee', index };
+    if (Math.hypot(hole.cup[0] - x, hole.cup[1] - z) < reach) return { kind: 'cup', index };
+  }
+  for (let index = layout.props.length - 1; index >= 0; index--) {
+    const prop = withDefaults(layout.props[index]);
+    const obstacle = propSize(prop).obstacle;
+    if (Math.hypot(prop.x - x, prop.z - z) < Math.max(reach, obstacle ? obstacle.radius : 0.5)) return { kind: 'prop', index };
+  }
+  return null;
+}
+
+function moveSelection(x, z) {
+  const limit = MAP_RADIUS - 0.05;                 // the rim is the antipode; there is nothing beyond it
+  const d = Math.hypot(x, z);
+  if (d > limit) { x = x / d * limit; z = z / d * limit; }
+  if (selection.kind === 'prop') Object.assign(layout.props[selection.index], { x: round(x), z: round(z) });
+  else { const spot = selectedSpot(); spot[0] = round(x); spot[1] = round(z); }
+}
+
+// ------------------------------------------------------------------ side panel
+
+const toolBar = document.getElementById('tools');
+for (const name of ['select', 'house', 'tree', 'rock', 'mushroom']) {
+  const button = document.createElement('button');
+  button.textContent = name;
+  button.classList.toggle('on', name === tool);
+  button.onclick = () => { tool = name; for (const b of toolBar.children) b.classList.toggle('on', b.textContent === tool); };
+  toolBar.append(button);
+}
+
+/** A number field that edits in place: typing redraws, but never rebuilds the panel under you. */
+function field(parent, label, value, step, apply, rescatter = false) {
+  const row = document.createElement('div');
+  row.className = 'row';
+  const name = document.createElement('label');
+  name.textContent = label;
+  const input = document.createElement('input');
+  input.type = 'number';
+  input.step = step;
+  input.value = value;
+  input.oninput = () => {
+    if (input.value === '') return;
+    apply(Number(input.value));
+    if (rescatter) resolve(); else draw();
+  };
+  row.append(name, input);
+  parent.append(row);
+}
+
+function renderPanel() {
+  const panel = document.getElementById('panel');
+  panel.textContent = '';
+  if (!selection) {
+    const note = document.createElement('p');
+    note.className = 'note';
+    note.textContent = 'Click a marker to select it. Drag to move.';
+    panel.append(note);
+    return;
+  }
+  const title = document.createElement('div');
+  panel.append(title);
+
+  if (selection.kind === 'prop') {
+    const prop = layout.props[selection.index];
+    title.textContent = `${prop.type} #${selection.index + 1}`;
+    field(panel, 'x (m)', prop.x, 0.1, v => prop.x = v, true);
+    field(panel, 'z (m)', prop.z, 0.1, v => prop.z = v, true);
+    if (prop.type !== 'mushroom') field(panel, 'yaw (deg)', prop.yaw ?? 0, 5, v => prop.yaw = v);
+    if (prop.type === 'house') field(panel, 'style 0-2', prop.style ?? 0, 1, v => prop.style = Math.max(0, Math.min(2, Math.round(v))), true);
+    if (prop.type === 'tree') {
+      field(panel, 'scale', prop.scale ?? 1, 0.1, v => prop.scale = v, true);
+      const row = document.createElement('div');
+      row.className = 'row';
+      const label = document.createElement('label');
+      label.textContent = 'variant';
+      const toggle = document.createElement('button');
+      toggle.textContent = prop.variant ?? 'round';
+      toggle.onclick = () => { prop.variant = (prop.variant ?? 'round') === 'round' ? 'pine' : 'round'; toggle.textContent = prop.variant; draw(); };
+      row.append(label, toggle);
+      panel.append(row);
+    }
+    if (prop.type === 'rock') field(panel, 'size', prop.size ?? 0.8, 0.1, v => prop.size = v, true);
+    const reach = document.createElement('p');
+    reach.className = 'note';
+    reach.textContent = `${Math.hypot(prop.x, prop.z).toFixed(1)} m from the origin`;
+    panel.append(reach);
+  } else {
+    const hole = layout.holes[selection.index];
+    const spot = selectedSpot();
+    title.textContent = `hole ${selection.index + 1} ${selection.kind}`;
+    field(panel, 'x (m)', spot[0], 0.1, v => { spot[0] = v; }, true);
+    field(panel, 'z (m)', spot[1], 0.1, v => { spot[1] = v; }, true);
+    field(panel, 'par', hole.par, 1, v => hole.par = Math.max(1, Math.round(v)));
+    const span = document.createElement('p');
+    span.className = 'note';
+    const walk = distance(groundPoint(hole.tee[0], hole.tee[1], R), groundPoint(hole.cup[0], hole.cup[1], R)) * R;
+    span.textContent = `tee to cup: ${walk.toFixed(1)} m of real walking`;
+    panel.append(span);
+  }
+
+  const remove = document.createElement('button');
+  remove.className = 'wide';
+  remove.textContent = selection.kind === 'prop' ? 'Delete prop' : 'Delete hole';
+  remove.onclick = deleteSelection;
+  panel.append(remove);
+}
+
+function deleteSelection() {
+  if (!selection) return;
+  if (selection.kind === 'prop') layout.props.splice(selection.index, 1);
+  else if (layout.holes.length > 1) layout.holes.splice(selection.index, 1);
+  else return;
+  selection = null;
+  renderPanel();
+  resolve();
+}
+
+const scatterPanel = document.getElementById('scatter');
+for (const kind of ['tree', 'rock', 'mushroom', 'grass'])
+  field(scatterPanel, kind, layout.scatter[kind], 1, v => layout.scatter[kind] = Math.max(0, Math.round(v)), true);
+field(scatterPanel, 'seed', layout.seed, 1, v => layout.seed = Math.round(v), true);
+const addHole = document.createElement('button');
+addHole.className = 'wide';
+addHole.textContent = 'Add hole here';
+addHole.onclick = () => {
+  layout.holes.push({ tee: [round(centre.x), round(centre.z)], cup: [round(centre.x), round(centre.z + 16)], par: 3 });
+  selection = { kind: 'cup', index: layout.holes.length - 1 };
+  renderPanel();
+  resolve();
+};
+scatterPanel.append(addHole);
+
+// ------------------------------------------------------------------ the file
+
+const serialize = data => `// The map, authored on a flat plane: metres on the exp-map chart around the world origin. The
+// whole world is the disk of radius pi * R = ${MAP_RADIUS.toFixed(1)} m, and that rim is the single point
+// antipodal to the centre. See placement.js for the details.
+//
+// Written by /map-editor.html.
+export const LAYOUT = {
+  seed: ${data.seed},
+
+  holes: [
+${data.holes.map(h => `    { tee: [${h.tee[0]}, ${h.tee[1]}], cup: [${h.cup[0]}, ${h.cup[1]}], par: ${h.par} },`).join('\n')}
+  ],
+
+  props: [
+${data.props.map(p => `    { ${Object.entries(p).map(([k, v]) => `${k}: ${typeof v === 'string' ? `'${v}'` : v}`).join(', ')} },`).join('\n')}
+  ],
+
+  scatter: { tree: ${data.scatter.tree}, rock: ${data.scatter.rock}, mushroom: ${data.scatter.mushroom}, grass: ${data.scatter.grass} },
+};
+`;
+
+const status = document.getElementById('status');
+const serverNote = document.getElementById('server');
+let canSave = false;
+
+// Ask the server whether it can write layout.js. This project's dev server answers the probe;
+// a plain static file server (python -m http.server, for one) does not.
+(async () => {
+  try {
+    const response = await fetch('/save-layout', { cache: 'no-store' });
+    canSave = response.ok && (await response.text()).trim() === 'ready';
+  } catch {
+    canSave = false;
+  }
+  if (canSave) {
+    serverNote.className = 'note good';
+    serverNote.textContent = `Connected to the project dev server on ${location.host} — Save writes the file directly.`;
+  } else {
+    serverNote.className = 'note warn';
+    serverNote.textContent = `${location.host} is a plain file server and cannot save. Save will download `
+      + 'layout.js for you to drop into src/game/golf/ instead. To save in place, serve the project with '
+      + 'npm run dev (./run.command) and open the editor on that port.';
+  }
+})();
+
+function downloadLayout() {
+  const url = URL.createObjectURL(new Blob([serialize(layout)], { type: 'text/javascript' }));
+  const link = document.createElement('a');
+  link.href = url;
+  link.download = 'layout.js';
+  link.click();
+  URL.revokeObjectURL(url);
+}
+
+// Saving in place needs this project's dev server. On a plain static file server - python's
+// http.server answers POST with a 501, most others with a 404 or 405 - fall back to a download.
+document.getElementById('save').onclick = async () => {
+  if (!canSave) {
+    status.textContent = `${location.host} cannot save files — downloaded layout.js instead. Move it into src/game/golf/.`;
+    downloadLayout();
+    return;
+  }
+  let response;
+  try {
+    response = await fetch('/save-layout', { method: 'POST', headers: { 'Content-Type': 'text/plain' }, body: serialize(layout) });
+  } catch (error) {
+    status.textContent = `Could not reach the server (${error.message}). Downloaded layout.js instead.`;
+    downloadLayout();
+    return;
+  }
+  if (response.ok) {
+    status.textContent = 'Saved to src/game/golf/layout.js — reload the game.';
+    return;
+  }
+  if (response.status === 400) {
+    status.textContent = `The server rejected it: ${(await response.text()).slice(0, 120)}`;
+    return;
+  }
+  status.textContent = 'This server cannot save files. Downloaded layout.js instead — move it into '
+    + 'src/game/golf/. For saving in place, serve the project with ./run.command (npm run dev).';
+  downloadLayout();
+};
+document.getElementById('copy').onclick = async () => {
+  await navigator.clipboard.writeText(serialize(layout));
+  status.textContent = 'Copied. Paste it over src/game/golf/layout.js.';
+};
+document.getElementById('download').onclick = downloadLayout;
+document.getElementById('revert').onclick = () => {
+  layout = structuredClone(original);
+  selection = null;
+  status.textContent = 'Reverted to the layout on disk.';
+  renderPanel();
+  resolve();
+};
+
+// ------------------------------------------------------------------ input
+
+canvas.addEventListener('mousedown', event => {
+  const [x, z] = eventWorld(event);
+  if (tool !== 'select') {
+    const prop = { type: tool, x: round(x), z: round(z) };
+    if (tool !== 'mushroom') prop.yaw = 0;
+    if (tool === 'house') prop.style = 0;
+    if (tool === 'tree') { prop.scale = 1; prop.variant = 'round'; }
+    if (tool === 'rock') prop.size = 0.8;
+    layout.props.push(prop);
+    selection = { kind: 'prop', index: layout.props.length - 1 };
+    renderPanel();
+    resolve();
+    return;
+  }
+  selection = pick(x, z);
+  drag = selection ? { mode: 'item' } : { mode: 'pan', px: event.clientX, pz: event.clientY, x: centre.x, z: centre.z };
+  renderPanel();
+  draw();
+});
+addEventListener('mousemove', event => {
+  if (!drag) return;
+  if (drag.mode === 'pan') {
+    centre.x = drag.x - (event.clientX - drag.px) / metresPerPixel;
+    centre.z = drag.z + (event.clientY - drag.pz) / metresPerPixel;
+  } else {
+    moveSelection(...eventWorld(event));
+  }
+  draw();                              // the scatter is only re-rolled on release, so dragging stays smooth
+});
+addEventListener('mouseup', () => {
+  if (drag?.mode === 'item') { renderPanel(); resolve(); }
+  drag = null;
+});
+canvas.addEventListener('wheel', event => {
+  event.preventDefault();
+  metresPerPixel = Math.max(1.5, Math.min(60, metresPerPixel * Math.exp(-event.deltaY * 0.0015)));
+  draw();
+}, { passive: false });
+addEventListener('keydown', event => {
+  if (event.target.tagName === 'INPUT') return;
+  if (event.key === 'Delete' || event.key === 'Backspace') { event.preventDefault(); deleteSelection(); }
+});
+addEventListener('resize', draw);
+
+renderPanel();
+resolve();
+</script>
+</body>
+</html>

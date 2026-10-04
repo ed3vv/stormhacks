@@ -20,6 +20,28 @@ const contentTypes = {
   ".wasm": "application/wasm",
 };
 
+// The map editor posts a new layout here. Development only, and only ever this one file.
+const layoutFile = path.join(root, "src", "game", "golf", "layout.js");
+
+function saveLayout(request, response) {
+  const chunks = [];
+  request.on("data", (chunk) => {
+    chunks.push(chunk);
+    if (chunks.reduce((total, c) => total + c.length, 0) > 1e6) request.destroy();
+  });
+  request.on("end", () => {
+    const body = Buffer.concat(chunks).toString("utf8");
+    if (!body.includes("export const LAYOUT")) {
+      response.writeHead(400).end("That does not look like a layout file");
+      return;
+    }
+    fs.writeFile(layoutFile, body, (error) => {
+      if (error) response.writeHead(500).end(error.message);
+      else response.writeHead(200).end("Saved");
+    });
+  });
+}
+
 const server = http.createServer((request, response) => {
   let pathname;
 
@@ -27,6 +49,20 @@ const server = http.createServer((request, response) => {
     pathname = decodeURIComponent(new URL(request.url, `http://${host}`).pathname);
   } catch {
     response.writeHead(400).end("Bad request");
+    return;
+  }
+
+  if (pathname === "/save-layout") {
+    // GET is the editor's capability probe: it asks whether this server can write the file.
+    if (request.method === "GET") {
+      response.writeHead(200, { "Content-Type": "text/plain; charset=utf-8", "Cache-Control": "no-store" }).end("ready");
+      return;
+    }
+    if (request.method !== "POST") {
+      response.writeHead(405).end("Use POST");
+      return;
+    }
+    saveLayout(request, response);
     return;
   }
 
@@ -46,6 +82,8 @@ const server = http.createServer((request, response) => {
 
     response.writeHead(200, {
       "Content-Type": contentTypes[path.extname(filePath).toLowerCase()] || "application/octet-stream",
+      // this is a development server: a stale page in the browser is never what anyone wants
+      "Cache-Control": "no-store",
     });
     fs.createReadStream(filePath).pipe(response);
   });
