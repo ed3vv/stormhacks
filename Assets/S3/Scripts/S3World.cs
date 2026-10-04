@@ -36,7 +36,7 @@ public class S3World : MonoBehaviour
         public Obstacle(Vector4 foot, float radius, float height) { this.foot = foot; this.radius = radius; this.height = height; }
     }
 
-    /// <summary>The campaign: Meadow teaches golf, Desert teaches the laser, Aurora Basin needs both.</summary>
+    /// <summary>The campaign: Meadow teaches golf, Desert teaches the laser, the Eternal Poles need both.</summary>
     public enum Biome { Meadow, Desert, Basin }
 
     /// <summary>A laser puzzle laid out around a ground frame (local x, z metres; yaw degrees from +z towards +x).</summary>
@@ -85,7 +85,7 @@ public class S3World : MonoBehaviour
     public Material groundMaterial;
     [Tooltip("S3/Beam: laser light.")]
     public Material beamMaterial;
-    [Tooltip("S3/Glow: the aurora and the barrier over a sealed cup.")]
+    [Tooltip("S3/Glow: the barrier over a sealed cup.")]
     public Material glowMaterial;
     [Tooltip("S3/Particles: pollen, dust and snow drifting around the eye.")]
     public Material particleMaterial;
@@ -159,26 +159,29 @@ public class S3World : MonoBehaviour
     [Tooltip("Where the laser puzzles stand: local x, z metres, and yaw (degrees) of their north.")]
     public Vector3 puzzleFrame = new Vector3(0, 0, 0);
 
-    // The Aurora Basin: every cup is sealed under an ice barrier until a laser lights the crystal
-    // beside it. The locks are the Desert's puzzles again, placed (and checked by S3Setup) so the
-    // solved light misses the tees and greens. The frozen lake is only scenery.
-    [Header("Aurora Basin")]
+    // The Eternal Poles: every cup is sealed under an ice barrier until a laser lights the crystal
+    // beside it. The locks are puzzles of their own (frozen mirrors, a prism, twin lasers, the
+    // antipode), placed (and checked by S3Setup) so the solved light misses the tees and greens.
+    // You start each hole on foot. The frozen lake is only scenery.
+    [Header("Eternal Poles")]
     public HoleDef[] basinCourse =
     {
-        new HoleDef(0, -5, -2.5f, 7, 3),                // First Ice: the green sits short of the lake
-        new HoleDef(-5.5f, 6.5f, 3, 28.5f, 4),          // Skating Rink: across the lake
-        new HoleDef(6, 27, 15, 6, 4),
-        new HoleDef(17.5f, 3, -25.17f, 4.19f, 5),       // the cup is 7 m off the tee's antipode
-        new HoleDef(-22.5f, 2.5f, 14.97f, -1.66f, 5),   // Through the Lights: the cup is the tee's antipode
+        // laid out by walking real distances on the sphere (14, 21, 25, 37.7 and 30 m), with every green
+        // at least 11 m from the others and 8 m from the other holes' tees
+        new HoleDef(0, -4, 6, 9, 3),                        // Snowfield: a gentle opener
+        new HoleDef(4.56f, 5.69f, -13.13f, -5.96f, 4),
+        new HoleDef(-9.49f, -7.66f, 20.92f, -13.16f, 4),
+        new HoleDef(16.44f, -20.63f, -7.05f, 8.85f, 5),     // Polar Opposite: the cup is the tee's antipode
+        new HoleDef(-4.91f, 5.96f, -11.18f, -27.35f, 5),    // The Long Night
     };
     public LockDef[] basinLocks =
     {
-        // found by S3Setup.SearchLocks
-        new LockDef(S3Levels.Template.Reflection, 7.5f, -2f, 270),
-        new LockDef(S3Levels.Template.LongWay, -12f, 14.5f, 30, true),
-        new LockDef(S3Levels.Template.Zigzag, 20f, 22f, 180),
-        new LockDef(S3Levels.Template.Antipode, -34.17f, -4.81f, 15),
-        new LockDef(S3Levels.Template.FullCircle, 4.97f, 3.34f, 165, true),
+        // found by S3Setup.SearchLocks, checked by TestPuzzles and TestShortcuts
+        new LockDef(S3Levels.Template.FrozenMirror, 5f, 2f, 240),
+        new LockDef(S3Levels.Template.Prism, -3.13f, 4.04f, 240, true),
+        new LockDef(S3Levels.Template.TwinBeams, 4.92f, -13.16f, 195, true),
+        new LockDef(S3Levels.Template.Homecoming, -2.05f, 8.85f, 150),        // its mirror goes by the tee: the crystal's antipode
+        new LockDef(S3Levels.Template.FrozenRelay, -16.18f, -12.35f, 270, true),
     };
     [Tooltip("The frozen lake: local x, z metres and radius.")]
     public Vector3 basinLake = new Vector3(0, 17.5f, 6.8f);
@@ -192,7 +195,7 @@ public class S3World : MonoBehaviour
 
     public bool HasGolf => biome != Biome.Desert;
     public bool HasLasers => biome != Biome.Meadow;
-    public string MapName => biome == Biome.Desert ? "Desert Oasis" : biome == Biome.Basin ? "Aurora Basin" : "Meadow";
+    public string MapName => biome == Biome.Desert ? "Desert Oasis" : biome == Biome.Basin ? "Eternal Poles" : "Meadow";
 
     public Style ActiveStyle => biome == Biome.Desert ? desertStyle : biome == Biome.Basin ? basinStyle : meadowStyle;
 
@@ -362,11 +365,6 @@ public class S3World : MonoBehaviour
 
         var scenery = S3Scenery.Build(this, new System.Random(seed));   // registers obstacles, fades, shadows, patches
         CreateRenderer("Scenery", scenery.ToMesh("S3 Scenery"), objectMaterial, Matrix4x4.identity);
-        if (glowMaterial)
-        {
-            var glow = S3Scenery.BuildGlow(this);
-            if (glow != null) CreateRenderer("Aurora", glow.ToMesh("S3 Glow"), glowMaterial, Matrix4x4.identity);
-        }
 
         if (particleMaterial)
         {

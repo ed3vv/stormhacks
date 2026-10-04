@@ -8,7 +8,7 @@ using UnityEngine;
 ///   * land: the ball hits the ground, a wall or a piece (louder the harder it hits)
 ///   * click: placing or picking up a laser piece, addressing the ball, starting the power meter
 ///   * win + the crowd: a hole sunk (cheering under par, clapping at par, slow clapping over par),
-///     a Desert puzzle solved or a Basin cup's ice gate opened by the laser (clapping)
+///     a Desert puzzle solved or an Eternal Poles cup's ice gate opened by the laser (clapping)
 ///   * lose + boos: the ball went over or past the cup and carried on
 ///   * music: loops quietly, ducking under the jingles and the crowd
 ///
@@ -38,7 +38,7 @@ public class S3Audio : MonoBehaviour
     [Range(0, 1)] public float hitVolume = 0.65f;
     [Range(0, 1)] public float jingleVolume = 0.9f;
     [Tooltip("Extra level for the win jingle, on top of jingleVolume.")]
-    [Range(0, 1)] public float winVolume = 0.65f;
+    [Range(0, 1)] public float winVolume = 0.45f;
     [Range(0, 1)] public float crowdVolume = 0.8f;
     [Range(0, 1)] public float musicVolume = 0.3f;
     [Tooltip("Music level while a jingle plays, as a fraction of musicVolume.")]
@@ -139,7 +139,7 @@ public class S3Audio : MonoBehaviour
         if (a) a.OneShot(a.click, 0.7f);
     }
 
-    /// <summary>A Desert puzzle solved or a Basin gate opened.</summary>
+    /// <summary>A Desert puzzle solved or an Eternal Poles gate opened.</summary>
     public static void Win()
     {
         var a = Active;

@@ -45,7 +45,7 @@ Shader "S3/Object"
         float4 _S3Ball;           // the golf ball's centre on S^3
         float4 _S3BallInfo;       // x: radius (m), y: 1 when there is a ball
         float _S3CupR, _S3GreenR;
-        float _S3Biome;           // 0 meadow, 1 desert, 2 aurora basin
+        float _S3Biome;           // 0 meadow, 1 desert, 2 eternal poles
         float4 _S3Patch[16];      // desert grass patches / basin lakes: centre on S^3
         float _S3PatchR[16];      // ... and radius in metres
         float _S3PatchCount;

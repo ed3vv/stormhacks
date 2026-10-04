@@ -1,4 +1,4 @@
-// Additive glow for meshes in S^3 (the aurora, the barrier dome over a sealed cup).
+// Additive glow for meshes in S^3 (the barrier dome over a sealed cup).
 // Vertex colour rgb is the glow (authored in sRGB), alpha its strength. _Shimmer makes it ripple.
 Shader "S3/Glow"
 {
