@@ -1,4 +1,4 @@
-# Spherical Plane World
+# Inverse Golf
 
 The primary version is a modular WebGL2 browser game. The native macOS Metal
 reference build remains available under `native/`.
