@@ -1,0 +1,15 @@
+[S3] physics checks
+putt 6 m/s, friction 1.7: rolled 9.30 m (flat-world prediction 10.59 m), stopped after 3.17s, ended 9.30 m from start
+drive 20 m/s @30°: carry 23.09 m (flat ~35.3 m with no drag), apex 3.51 m (flat 5.10 m), flight 1.32s
+lap: after 7.54s at 10 m/s the ball is 0.014 m from its start (one lap = 75.4 m)
+vertical drive at 90 % power (19.4 m/s): apex 17.91 m (pole at 18.85 m), landed 0.00 m away (antipode = 37.70 m) after 6.31s
+vertical drive at 92 % power (19.8 m/s): apex 18.65 m (pole at 18.85 m), landed 0.00 m away (antipode = 37.70 m) after 6.42s
+vertical drive at 94 % power (20.3 m/s): apex 18.84 m (pole at 18.85 m), landed 37.70 m away (antipode = 37.70 m) after 5.89s
+vertical drive at 100 % power (21.5 m/s): apex 18.85 m (pole at 18.85 m), landed 37.70 m away (antipode = 37.70 m) after 5.40s
+ball released at rest on the pole: after 1s it has dropped 4.87 m (free fall 4.9 m), NaN: False
+exp/log round trip error 0.000000, normal error 0.000000
+hole 1: tee→cup 21.0 m
+hole 2: tee→cup 13.8 m
+hole 3: tee→cup 37.7 m
+hole 4: tee→cup 16.3 m
+hole 5: tee→cup 19.8 m
