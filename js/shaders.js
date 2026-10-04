@@ -9,6 +9,7 @@ out vec4 outColor;
 uniform vec2 resolution;
 uniform vec4 player,forward,rightAxis,upAxis,golfBall,hole,aim,game;
 uniform vec4 boxData[98];
+uniform vec4 guide[9];
 
 float sphereHit(vec4 c,float radius,vec4 d,float limit){
  float a=dot(player,c),b=dot(d,c),range=sqrt(a*a+b*b),cr=cos(radius);
@@ -22,8 +23,9 @@ void main(){
  float curved=uv.y-.105*uv.x*uv.x;
  vec4 ray=normalize(forward+uv.x*rightAxis+curved*upAxis);
  float groundDistance=mod(atan(-player.w,ray.w)+3.14159265,3.14159265),best=groundDistance;
- int hitBox=-1,hitSphere=0;vec3 hitLocal=vec3(0),hitHalf=vec3(1),hitColor=vec3(1);
+ int hitBox=-1,hitSphere=0,hitGuide=0;vec3 hitLocal=vec3(0),hitHalf=vec3(1),hitColor=vec3(1);
  if(game.y<.5){float t=sphereHit(golfBall,game.z,ray,best);if(t<best){best=t;hitSphere=1;}}
+ if(game.x<.5&&game.y<.5)for(int i=0;i<9;i++){float t=sphereHit(guide[i],.0065,ray,best);if(t<best){best=t;hitSphere=3;hitGuide=i;}}
  vec4 flagCenter=normalize(vec4(hole.xyz,.31));float ft=sphereHit(flagCenter,.055,ray,best);if(ft<best){best=ft;hitSphere=2;}
  for(int i=0;i<14;i++){
   int j=i*7;vec3 anchor=boxData[j].xyz,ax=boxData[j+1].xyz,ay=boxData[j+2].xyz;
@@ -44,7 +46,7 @@ void main(){
   }
  }
  if(hitBox>=0){vec3 face=abs(hitLocal)/max(hitHalf,vec3(.0001));float light=face.z>face.x&&face.z>face.y?1.12:(face.x>face.y?.72:.88);outColor=vec4(hitColor*light,1);return;}
- if(hitSphere>0){vec4 p=player*cos(best)+ray*sin(best);if(hitSphere==1){vec4 n=normalize(p*dot(p,golfBall)-golfBall);float h=.62+.38*abs(dot(n,player));outColor=vec4(vec3(.96,.97,1)*h,1);}else outColor=vec4(.92,.08,.06,1);return;}
+ if(hitSphere>0){vec4 p=player*cos(best)+ray*sin(best);if(hitSphere==1){vec4 n=normalize(p*dot(p,golfBall)-golfBall);float h=.62+.38*abs(dot(n,player));outColor=vec4(vec3(.96,.97,1)*h,1);}else if(hitSphere==3)outColor=vec4(mix(vec3(1,.9,.3),vec3(1,.55,.15),float(hitGuide)/8.),1);else outColor=vec4(.92,.08,.06,1);return;}
  vec4 gp=player*cos(groundDistance)+ray*sin(groundDistance),gn=normalize(vec4(0,0,0,1)-gp*gp.w),light=normalize(player-gp*dot(gp,player));
  float diffuse=abs(dot(gn,light)),lon=atan(gp.y,gp.x),lat=asin(clamp(gp.z,-1.,1.));
  float checker=mod(floor(lon*1.9099)+floor(lat*3.8197),2.);vec3 base=mix(vec3(.13,.36,.2),vec3(.55,.62,.35),checker),sky=vec3(.3,.5,.82);

@@ -21,12 +21,14 @@ You can also use the launcher for your operating system:
 The native Swift reference build is macOS-only; double-click
 `run-native.command` to launch it.
 
-Move the cursor horizontally to steer the center of the automatic aiming sweep.
+Move the cursor horizontally to steer the center of the automatic aiming sweep,
+and vertically to set the launch height, from nearly flat up to straight up.
 Press Space once to lock its direction; the power meter then oscillates. Press
 Space again to lock power and shoot.
 Press R to restart the hole and Escape to release the mouse.
 
 Shots launch into the air. Gravity continuously points toward the nearest part
-of the spherical ground. Ground and platform impacts bounce until their
+of the spherical ground, so a strong enough shot straight up passes through the
+center of the world and comes down on the opposite side. Ground and platform impacts bounce until their
 vertical energy is low enough to settle into rolling, while box-side impacts
 ricochet with stronger restitution.

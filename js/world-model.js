@@ -1,14 +1,11 @@
 import { BOXES, PHYSICS_BOX_COUNT } from './world-data.js';
+import { dot, add, sub, mul, len, norm, cross, xyz, clamp } from './vec.js';
 
-const dot = (a,b) => a.reduce((s,v,i)=>s+v*b[i],0);
-const add = (a,b) => a.map((v,i)=>v+b[i]);
-const sub = (a,b) => a.map((v,i)=>v-b[i]);
-const mul = (a,s) => a.map(v=>v*s);
-const len = a => Math.hypot(...a);
-const norm = a => { const l=len(a); return l>1e-9?mul(a,1/l):a.map(()=>0); };
-const cross = (a,b) => [a[1]*b[2]-a[2]*b[1],a[2]*b[0]-a[0]*b[2],a[0]*b[1]-a[1]*b[0]];
-const xyz = a => [a[0],a[1],a[2]];
-const clamp = (x,a,b) => Math.max(a,Math.min(b,x));
+const DEFAULT_LAUNCH=24*Math.PI/180, MIN_LAUNCH=2*Math.PI/180, MAX_LAUNCH=Math.PI/2;
+export const GUIDE_DOTS=9;
+// The p^4 term leaves everyday shots feeling as before but gives full power enough
+// speed to climb straight up through the center and land on the far wall.
+const launchSpeed = p => .42+p*1.18+.7*p**4;
 
 export class WorldModel {
   constructor(){ this.ballRadius=.026; this.holeRadius=.052; this.holePosition=[Math.cos(1.65),Math.sin(1.65),0]; this.reset(); }
@@ -16,7 +13,7 @@ export class WorldModel {
     this.ballPosition=[1,0,0]; this.aimDirection=[0,1,0]; this.baseAim=[0,1,0]; this.lockedCamera=[0,1,0];
     this.groundVelocity=[0,0,0]; this.airVelocity=[0,0,0,0]; this.support=null; this.supportAltitude=0;
     this.airCenter=this.restingCenter(this.ballPosition,0); this.airborne=false; this.complete=false;
-    this.aimLocked=false; this.powerSelecting=false; this.aimPhase=0; this.powerPhase=0; this.power=0; this.strokes=0; this.pitch=-.2;
+    this.aimLocked=false; this.powerSelecting=false; this.aimPhase=0; this.powerPhase=0; this.power=0; this.strokes=0; this.launchAngle=DEFAULT_LAUNCH; this.lastGravity=[0,0,0,0];
     this.updateCamera();
   }
   get moving(){ return this.airborne || len(this.groundVelocity)>.001; }
@@ -29,42 +26,59 @@ export class WorldModel {
     if(this.moving||this.complete)return;
     if(!this.aimLocked){this.aimLocked=true;this.powerSelecting=true;this.power=0;this.powerPhase=0;return;}
     if(!this.powerSelecting)return;
-    this.powerSelecting=false; const speed=.42+this.power*1.18, angle=24*Math.PI/180;
+    this.powerSelecting=false;
     this.airCenter=this.restingCenter(this.ballPosition,this.supportAltitude);
-    const horizontal=[...this.aimDirection,0], altitude=this.supportAltitude+this.ballRadius;
-    const up=[-this.ballPosition[0]*Math.sin(altitude),-this.ballPosition[1]*Math.sin(altitude),-this.ballPosition[2]*Math.sin(altitude),Math.cos(altitude)];
-    this.airVelocity=mul(add(mul(horizontal,Math.cos(angle)),mul(up,Math.sin(angle))),speed);
+    this.airVelocity=mul(this.launchDirection(),launchSpeed(this.power));
     this.groundVelocity=[0,0,0];this.lockedCamera=[...this.aimDirection];this.airborne=true;this.support=null;this.supportAltitude=0;this.strokes++;
   }
+  // Unit 4D launch velocity at the resting ball: aim direction tilted up by launchAngle.
+  launchDirection(){
+    const horizontal=[...this.aimDirection,0], altitude=this.supportAltitude+this.ballRadius;
+    const up=[...mul(this.ballPosition,-Math.sin(altitude)),Math.cos(altitude)];
+    return add(mul(horizontal,Math.cos(this.launchAngle)),mul(up,Math.sin(this.launchAngle)));
+  }
+  // Dots along the initial launch line, so the chosen height is visible before shooting.
+  get guidePoints(){
+    const c=this.restingCenter(this.ballPosition,this.supportAltitude),d=this.launchDirection(),points=[];
+    for(let i=0;i<GUIDE_DOTS;i++){const t=.06+i*.035;points.push(...add(mul(c,Math.cos(t)),mul(d,Math.sin(t))));}
+    return points;
+  }
   look(dx,dy){
-    if(!this.moving&&!this.complete&&!this.aimLocked){
+    if(this.moving||this.complete)return;
+    if(!this.aimLocked){
       this.baseAim=this.rotated(this.baseAim,dx*.0025);
       this.aimDirection=this.rotated(this.baseAim,Math.sin(this.aimPhase*1.7)*.72);
     }
-    this.pitch=clamp(this.pitch-dy*.0025,-.85,.42);this.updateCamera();
+    this.launchAngle=clamp(this.launchAngle-dy*.004,MIN_LAUNCH,MAX_LAUNCH);this.updateCamera();
   }
   update(dt){
-    const was=this.moving;
+    const was=this.moving,wasAirborne=this.airborne;
     if(!this.moving&&!this.complete){
       if(!this.aimLocked){this.aimPhase+=dt;this.aimDirection=this.rotated(this.baseAim,Math.sin(this.aimPhase*1.7)*.72);}
       else if(this.powerSelecting){this.powerPhase+=dt;this.power=.5-.5*Math.cos(this.powerPhase*3.2);}
     }
     if(this.airborne)this.updateAir(dt);else this.updateRolling(dt);
+    // A long flight can carry the ball far around (or through) the world, so re-aim the
+    // rolling camera along the direction it actually landed in.
+    if(wasAirborne&&!this.airborne)this.lockedCamera=[...this.aimDirection];
     if(was&&!this.moving&&!this.complete)this.prepareNext(); this.updateCamera();
   }
   rotated(direction,angle){const side=norm(cross(this.ballPosition,direction));return norm(add(mul(direction,Math.cos(angle)),mul(side,Math.sin(angle))));}
   prepareNext(){this.baseAim=[...this.aimDirection];this.lockedCamera=[...this.aimDirection];this.aimLocked=false;this.powerSelecting=false;this.aimPhase=0;this.powerPhase=0;this.power=0;}
   updateAir(dt){
     for(let remaining=dt;remaining>0&&this.airborne;){const h=Math.min(remaining,1/180);remaining-=h;
-      const ground=norm(xyz(this.airCenter)), closest=[...ground,0];
-      const gravity=norm(sub(closest,mul(this.airCenter,dot(this.airCenter,closest))));
+      // Gravity points along the shortest path to the ground. At the exact center of the
+      // world every direction is "down", so keep pulling the way gravity last pointed.
+      const ground=len(xyz(this.airCenter))>1e-5?norm(xyz(this.airCenter)):null;
+      const pull=ground?[...ground,0]:this.lastGravity,gravity=norm(sub(pull,mul(this.airCenter,dot(this.airCenter,pull))));
+      this.lastGravity=gravity;
       this.airVelocity=add(this.airVelocity,mul(gravity,1.32*h));
       this.airVelocity=sub(this.airVelocity,mul(this.airCenter,dot(this.airVelocity,this.airCenter)));
       this.airVelocity=mul(this.airVelocity,Math.exp(-.035*h));
       const speed=len(this.airVelocity), previous=[...this.airCenter];
       if(speed>.0001){const d=mul(this.airVelocity,1/speed),travel=speed*h;this.airCenter=norm(add(mul(previous,Math.cos(travel)),mul(d,Math.sin(travel))));const transported=norm(add(mul(previous,-Math.sin(travel)),mul(d,Math.cos(travel))));this.airVelocity=mul(transported,speed);}
       if(this.handleAirBoxes(previous)){if(!this.airborne)break;continue;}
-      this.ballPosition=norm(xyz(this.airCenter));const hv=sub(xyz(this.airVelocity),mul(this.ballPosition,dot(xyz(this.airVelocity),this.ballPosition)));if(len(hv)>.001)this.aimDirection=norm(hv);
+      if(len(xyz(this.airCenter))>1e-5)this.ballPosition=norm(xyz(this.airCenter));const hv=sub(xyz(this.airVelocity),mul(this.ballPosition,dot(xyz(this.airVelocity),this.ballPosition)));if(len(hv)>.001)this.aimDirection=norm(hv);
       const altitude=Math.atan2(Math.abs(this.airCenter[3]),len(xyz(this.airCenter))),side=this.airCenter[3]>=0?1:-1;
       const outward=[...mul(this.ballPosition,-Math.sin(altitude)),side*Math.cos(altitude)],outSpeed=dot(this.airVelocity,outward);
       if(altitude<=this.ballRadius&&outSpeed<=0){if(-outSpeed>.14){this.airCenter=this.restingCenter(this.ballPosition,.001);this.reflectAir(outward,.38);}else this.landGround();}
@@ -92,5 +106,5 @@ export class WorldModel {
   faceNormal(b,dim,side,bound,center){let raw;if(dim<2){const spatial=sub(mul(b[dim+1],side),mul(b[0],Math.abs(bound)));raw=[...spatial,0];}else raw=[...mul(b[0],-Math.abs(bound)),side];return norm(sub(raw,mul(center,dot(raw,center))));}
   reflectAir(n,e){const vn=dot(this.airVelocity,n);if(vn>=0)return;this.airVelocity=add(mul(sub(this.airVelocity,mul(n,vn)),.9),mul(n,-vn*e));this.airVelocity=sub(this.airVelocity,mul(this.airCenter,dot(this.airVelocity,this.airCenter)));}
   restingCenter(q,alt){const a=alt+this.ballRadius;return [...mul(q,Math.cos(a)),Math.sin(a)];}
-  updateCamera(){let cameraDir=this.moving?this.lockedCamera:this.baseAim;cameraDir=sub(cameraDir,mul(this.ballPosition,dot(cameraDir,this.ballPosition)));cameraDir=len(cameraDir)<1e-5?this.aimDirection:norm(cameraDir);const follow=.30;this.position=norm(sub(mul(this.ballPosition,Math.cos(follow)),mul(cameraDir,Math.sin(follow))));this.forward=norm(add(mul(this.ballPosition,Math.sin(follow)),mul(cameraDir,Math.cos(follow))));this.right=norm(cross(this.position,this.forward));this.cameraSupportAltitude=this.airborne?0:this.supportAltitude;}
+  updateCamera(){this.pitch=clamp(-.2+.26*(this.launchAngle-DEFAULT_LAUNCH),-.85,.42);let cameraDir=this.moving?this.lockedCamera:this.baseAim;cameraDir=sub(cameraDir,mul(this.ballPosition,dot(cameraDir,this.ballPosition)));cameraDir=len(cameraDir)<1e-5?this.aimDirection:norm(cameraDir);const follow=.30;this.position=norm(sub(mul(this.ballPosition,Math.cos(follow)),mul(cameraDir,Math.sin(follow))));this.forward=norm(add(mul(this.ballPosition,Math.sin(follow)),mul(cameraDir,Math.cos(follow))));this.right=norm(cross(this.position,this.forward));this.cameraSupportAltitude=this.airborne?0:this.supportAltitude;}
 }
