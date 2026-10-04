@@ -9,8 +9,9 @@ Install [Node.js](https://nodejs.org/), open a terminal in this folder, and run:
 npm run dev
 ```
 
-Then open `http://127.0.0.1:8000/`. No `npm install` step is needed because the
-server has no third-party dependencies.
+Open the URL printed in the terminal (normally `http://127.0.0.1:8000/`). If
+that port is already occupied, the server automatically tries the next one. No
+`npm install` step is needed because the server has no third-party dependencies.
 
 You can also use the launcher for your operating system:
 
@@ -42,6 +43,8 @@ Move the cursor horizontally to steer the center of the automatic aiming sweep,
 and vertically to set the launch height, from nearly flat up to straight up.
 Press Space once to lock its direction; the power meter then oscillates. Press
 Space again to lock power and shoot.
+Press V to toggle free-view mode. In free view, the cursor can look in any
+direction, golf controls pause, and only the FPS display remains visible.
 Press R to restart the hole and Escape to release the mouse.
 
 Shots launch into the air. Gravity continuously points toward the nearest part

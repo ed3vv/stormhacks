@@ -1,5 +1,11 @@
-export function bindGolfInput(canvas, model) {
+export function bindGolfInput(canvas, model, camera, onViewModeChange) {
   const onKeyDown = event => {
+    if (event.code === 'KeyV' && !event.repeat) {
+      camera.setFreeView(!camera.freeView);
+      onViewModeChange(camera.freeView);
+      return;
+    }
+    if (camera.freeView) return;
     if (event.code === 'Space') {
       event.preventDefault();
       if (!event.repeat) model.pressAction();
@@ -10,7 +16,8 @@ export function bindGolfInput(canvas, model) {
 
   const onMouseMove = event => {
     if (document.pointerLockElement === canvas || event.target === canvas) {
-      model.look(event.movementX, event.movementY);
+      if (camera.freeView) camera.look(event.movementX, event.movementY);
+      else model.look(event.movementX, event.movementY);
     }
   };
 
@@ -21,6 +28,8 @@ export function bindGolfInput(canvas, model) {
   canvas.addEventListener('click', capturePointer);
 
   return () => {
+    camera.setFreeView(false);
+    onViewModeChange(false);
     removeEventListener('keydown', onKeyDown);
     removeEventListener('mousemove', onMouseMove);
     canvas.removeEventListener('click', capturePointer);

@@ -35,10 +35,36 @@ function groundFrame(m){
 }
 
 export class Camera {
-  constructor(){this.frame=null;this.wasAirborne=false;this.settleFrom=null;this.settle=1;}
+  constructor(){this.frame=null;this.wasAirborne=false;this.settleFrom=null;this.settle=1;this.freeView=false;this.freeForward=null;this.freeRight=null;this.freeUp=null;this.freePitch=0;}
+  setFreeView(enabled){
+    this.freeView=enabled;
+    if(enabled&&this.frame)this.beginFreeView();
+  }
+  // Recreates the original pre-golf camera: yaw stays parallel to the local ground,
+  // while pitch is stored separately and never introduces roll.
+  beginFreeView(){
+    const {eye,forward}=this.frame;
+    let up=localUp(eye)||this.frame.up;
+    let flatForward=tangent(forward,up);
+    if(len(flatForward)<1e-4){up=this.frame.up;flatForward=forward;this.freePitch=0;}
+    else this.freePitch=Math.asin(clamp(dot(forward,up),-1,1));
+    this.freeUp=norm(up);
+    this.freeForward=norm(flatForward);
+    this.freeRight=mul(cross4(eye,this.freeForward,this.freeUp),-1);
+  }
+  look(dx,dy){
+    if(!this.freeView||!this.frame||!this.freeForward)return;
+    const yaw=dx*.0025,cy=Math.cos(yaw),sy=Math.sin(yaw),oldForward=this.freeForward;
+    this.freeForward=add(mul(oldForward,cy),mul(this.freeRight,sy));
+    this.freeRight=add(mul(oldForward,-sy),mul(this.freeRight,cy));
+    this.freePitch=clamp(this.freePitch-dy*.0025,-1.56,1.56);
+    const cp=Math.cos(this.freePitch),sp=Math.sin(this.freePitch);
+    this.frame={eye:this.frame.eye,forward:add(mul(this.freeForward,cp),mul(this.freeUp,sp)),up:add(mul(this.freeForward,-sp),mul(this.freeUp,cp)),right:this.freeRight};
+  }
   update(m,dt){
     const ground=groundFrame(m);
-    if(!this.frame){this.frame=ground;return;}
+    if(!this.frame){this.frame=ground;if(this.freeView)this.beginFreeView();return;}
+    if(this.freeView)return;
     if(m.airborne)this.frame=this.follow(m,dt);
     else{
       if(this.wasAirborne){this.settleFrom=this.frame;this.settle=0;}

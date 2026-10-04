@@ -25,8 +25,7 @@ void main(){
  float groundDistance=mod(atan(-player.w,ray.w)+3.14159265,3.14159265),best=groundDistance;
  int hitBox=-1,hitSphere=0,hitGuide=0;vec3 hitLocal=vec3(0),hitHalf=vec3(1),hitColor=vec3(1);
  if(game.y<.5){float t=sphereHit(golfBall,game.z,ray,best);if(t<best){best=t;hitSphere=1;}}
- if(game.x<.5&&game.y<.5)for(int i=0;i<9;i++){float t=sphereHit(guide[i],.0065,ray,best);if(t<best){best=t;hitSphere=3;hitGuide=i;}}
- vec4 flagCenter=normalize(vec4(hole.xyz,.31));float ft=sphereHit(flagCenter,.055,ray,best);if(ft<best){best=ft;hitSphere=2;}
+ if(game.x<.5&&game.y<.5)for(int i=0;i<9;i++){float t=sphereHit(guide[i],.0024,ray,best);if(t<best){best=t;hitSphere=3;hitGuide=i;}}
  for(int i=0;i<14;i++){
   int j=i*7;vec3 anchor=boxData[j].xyz,ax=boxData[j+1].xyz,ay=boxData[j+2].xyz;
   vec3 halfSize=boxData[j+3].xyz,objColor=boxData[j+4].xyz;vec4 sphereCenter=boxData[j+5];float sphereCos=boxData[j+6].x;
@@ -53,6 +52,6 @@ void main(){
  vec3 color=mix(sky,base*(.35+.75*diffuse),exp(-.13*groundDistance));
  if(dot(gp.xyz,hole.xyz)>cos(hole.w))color=vec3(.018,.022,.025);
  else if(game.x<.5&&game.y<.5){vec3 bg=normalize(golfBall.xyz),side=normalize(cross(bg,aim.xyz));float along=atan(dot(gp.xyz,aim.xyz),dot(gp.xyz,bg)),lateral=asin(clamp(dot(gp.xyz,side),-1.,1.));
-  const float start=.045,total=.72,spacing=.052;if(along>start&&along<total){float number=floor((along-start)/spacing+.5),center=start+number*spacing,dist=length(vec2(along-center,lateral));float circle=1.-smoothstep(.007,.011,dist),fade=pow(clamp(1.-along/total,0.,1.),.72);color=mix(color,vec3(1),circle*fade);}}
+  const float start=.045,total=.72,spacing=.052;if(along>start&&along<total){float number=floor((along-start)/spacing+.5),center=start+number*spacing,dist=length(vec2(along-center,lateral));float circle=1.-smoothstep(.0025,.004,dist),fade=pow(clamp(1.-along/total,0.,1.),.72);color=mix(color,vec3(1),circle*fade);}}
  outColor=vec4(color,1);
 }`;

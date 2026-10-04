@@ -28,8 +28,13 @@ export function createMenu() {
 export function createHud() {
   const fps = byId('fps');
   const game = byId('game');
+  const help = document.querySelector('#hud .help');
 
   return {
+    setViewMode(enabled) {
+      game.hidden = enabled;
+      help.hidden = enabled;
+    },
     update(frames, elapsedMilliseconds, model) {
       fps.textContent = `FPS: ${Math.round(frames * 1000 / elapsedMilliseconds)}`;
       const filled = Math.round(model.power * 12);

@@ -9,7 +9,7 @@ export function createGolfGame(canvas) {
   const camera = new Camera();
   const renderer = new Renderer(canvas, model, camera);
   const hud = createHud();
-  const unbindInput = bindGolfInput(canvas, model);
+  const unbindInput = bindGolfInput(canvas, model, camera, enabled => hud.setViewMode(enabled));
   let animationFrame = 0;
   let last = performance.now();
   let statsTime = last;
