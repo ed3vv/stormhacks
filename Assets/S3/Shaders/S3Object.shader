@@ -155,8 +155,22 @@ Shader "S3/Object"
 
         float3 MeadowGround(float3 g, float n1, float n2, float n3)
         {
-            float3 grass = lerp(float3(0.36, 0.62, 0.24), float3(0.50, 0.74, 0.30), n1);
-            return grass * (0.86 + 0.18 * n2 + 0.08 * n3);
+            // broad swathes of lush and sun-dried turf, then clumps and a fine grain of blades
+            float n0 = Noise(g * 0.07 + float3(11.7, 3.1, 5.9));
+            float3 lush = float3(0.27, 0.50, 0.20), dry = float3(0.50, 0.62, 0.29);
+            float3 grass = lerp(lush, dry, smoothstep(0.3, 0.8, n1 * 0.6 + n0 * 0.4));
+            grass *= 0.82 + 0.2 * n2 + 0.1 * n3;
+            float grain = Noise(g * 14.0);
+            grass *= 0.95 + 0.08 * grain;
+            // clover and wildflowers: little round specks in clumps, fading out with distance before they shimmer
+            float3 cell = floor(g * 4.0);
+            float pick = Hash(cell + 5.3);
+            float spot = 1 - smoothstep(0.2, 0.3, length(frac(g * 4.0) - 0.5));
+            float far = saturate(1.8 - length(fwidth(g)) * 4.0);
+            float flower = step(0.93, pick) * smoothstep(0.4, 0.65, n2) * spot * far;
+            float3 petal = frac(pick * 131.7) > 0.55 ? float3(0.97, 0.95, 0.88)
+                         : frac(pick * 71.3) > 0.4 ? float3(0.98, 0.82, 0.30) : float3(0.80, 0.62, 0.92);
+            return lerp(grass, petal, flower * 0.9);
         }
 
         float3 DesertGround(float4 p, float3 g, float n1, float n2, float n3)
@@ -243,23 +257,43 @@ Shader "S3/Object"
             float4 L = _S3Sun - dot(_S3Sun, p) * p;
             float lenL = length(L);
             L = lenL > 1e-5 ? L / lenL : n;
-            float diff = saturate(dot(n, L));
+            // slightly wrapped diffuse: a softer terminator on the low-poly facets
+            float ndl = dot(n, L);
+            float diff = saturate((ndl + 0.2) / 1.2);
             float4 up = float4(0, 1, 0, 0) - p.y * p;
             float upLen = length(up);
             float hemi = upLen > 1e-5 ? dot(n, up / upLen) * 0.5 + 0.5 : 1;
 
             float3 base = i.color.rgb * _Color.rgb;
-            if (_Ground > 0.5) base *= GroundColor(p);
+            bool ground = _Ground > 0.5;
+            if (ground) base *= GroundColor(p);
             float3 ambient = lerp(_S3GroundAmbient.rgb, _S3SkyAmbient.rgb, hemi);
-            float3 col = base * (ambient + _S3SunColor.rgb * diff);
+            // props: ambient occlusion near the ground, so trunks, walls and rocks sit in the grass
+            float ao = 1;
+            if (!ground)
+            {
+                float h = asin(clamp(p.y, -1, 1)) * _S3R;   // metres above the ground
+                ao = lerp(0.8, 1, smoothstep(0.0, 1.0, h));   // on top of the baked per-prop occlusion
+            }
+            float3 col = base * (ambient * ao + _S3SunColor.rgb * diff * lerp(0.8, 1, ao));
             // soft rim of sunlight on silhouettes
             float rim = pow(1 - saturate(dot(n, toEye)), 4);
             col += base * _S3SunColor.rgb * rim * 0.35 * (0.4 + 0.6 * diff);
+            // a gentle sun glint on props (roofs, rocks, ice, the ball)
+            if (!ground)
+            {
+                float4 hv = L + toEye;
+                float hl = length(hv);
+                float spec = hl > 1e-5 ? pow(saturate(dot(n, hv / hl)), 28) : 0;
+                col += _S3SunColor.rgb * spec * 0.22 * saturate(ndl * 4);
+            }
             // emissive: vertex alpha below 1 (lenses, crystals) plus a per-renderer glow
             col += base * ((1 - i.color.a) * 1.6 + _Glow);
 
             float t = atan2(length(i.q.xyz), i.q.w);   // geodesic distance from the eye
-            col = lerp(col, _S3Haze.rgb, _S3Haze.a * smoothstep(0.4 * PI, PI, t));
+            // aerial perspective: a little haze already at middle distance for depth, full towards the antipode
+            float haze = 0.3 * smoothstep(0.06 * PI, 0.45 * PI, t) + 0.7 * smoothstep(0.4 * PI, PI, t);
+            col = lerp(col, _S3Haze.rgb, _S3Haze.a * haze);
             // colours above are authored in sRGB; the project renders in linear space
             #ifndef UNITY_COLORSPACE_GAMMA
                 col = max(col, 0);

@@ -1,3 +1,0 @@
-Roboto (Regular, Medium, Bold, Black) by Christian Robertson / Google, used for the HUD.
-Licensed under the Apache License, Version 2.0: https://www.apache.org/licenses/LICENSE-2.0
-Copied from the com.unity.searcher package's FlatSkin fonts.

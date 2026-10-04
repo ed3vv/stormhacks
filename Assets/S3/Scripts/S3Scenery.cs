@@ -130,7 +130,7 @@ public static class S3Scenery
         BuildFences(world, keep, false);
 
         // trees
-        for (int i = 0; i < 34; i++)
+        for (int i = 0; i < 20; i++)
         {
             if (!TryPlace(rng, R, keep, 1.8f, out var frame)) continue;
             var mb = new MeshBuilder();
@@ -375,7 +375,7 @@ public static class S3Scenery
         }
 
         // snowy pines, sparse (and kept off the locks' light) so the puzzles read clearly
-        for (int i = 0; i < 24; i++)
+        for (int i = 0; i < 16; i++)
         {
             if (!TryPlace(rng, R, keep, 1.8f, out var frame)) continue;
             var mb = new MeshBuilder();
@@ -1328,9 +1328,7 @@ public static class S3Scenery
     public static Mesh BallMesh(float r)
     {
         var mb = new MeshBuilder(1f);
-        var red = new Color(0.9f, 0.15f, 0.1f);
-        mb.Icosphere(Vector3.zero, Vector3.one * r, 2, Color.white, null, 0,
-                     c => Mathf.Abs(c.y) < 0.22f || (c.x > 0.75f) ? red : new Color(0.97f, 0.97f, 0.95f));
+        mb.Icosphere(Vector3.zero, Vector3.one * r, 3, new Color(0.97f, 0.97f, 0.95f));
         return mb.ToMesh("S3 Ball");
     }
 

@@ -1,5 +1,6 @@
 using System;
 using System.Collections.Generic;
+using System.Linq;
 using UnityEngine;
 using UnityEngine.InputSystem;
 
@@ -22,7 +23,8 @@ using UnityEngine.InputSystem;
 /// every cup is sealed under an ice barrier until you light the crystal beside it with the laser
 /// (see S3Puzzle); there each hole starts on foot beside the ball with a mirror in hand, and F
 /// addresses the ball whenever you want to golf. Mirrors you place are solid, so the ball bounces off them. M jumps between maps,
-/// and L opens the level selector to jump straight to any hole or puzzle.
+/// L opens the level select to jump straight to any hole or puzzle, and Esc pauses (with the controls).
+/// The HUD and menus are drawn by S3HudView (UI Toolkit); this class pushes its state there every frame.
 ///
 /// Physics constants are ed3vv's, which are in unit-sphere units; multiplying by the world
 /// radius R gives the same trajectories at this world's size with the same timing.
@@ -56,6 +58,9 @@ public class S3Golf : MonoBehaviour
     [Tooltip("Speed multiplier while Shift is held, for fine aiming.")]
     public float fineAimFactor = 0.25f;
     public float powerCycleRate = 3.2f;       // the meter swings 0 -> 1 -> 0 every 2 pi / rate seconds
+    [Tooltip("After a shot the aim faces roughly towards the cup, off by this many degrees (random, either side), so you still line it up yourself.")]
+    public float autoAimOffsetMin = 4f;
+    public float autoAimOffsetMax = 12f;
 
     [Tooltip("How close (metres) you must walk to your ball to address it.")]
     public float reach = 2.5f;
@@ -99,6 +104,12 @@ public class S3Golf : MonoBehaviour
     public float glideArc = 0.25f;
     public float glideMaxArc = 6f;
 
+    [Header("Sinking it")]
+    [Tooltip("Seconds after the ball drops before the card with Replay and Next comes up.")]
+    public float resultDelay = 1.2f;
+    [Tooltip("Shots that hole out from at least this far (metres) can be watched again from outside the world. 0: every one.")]
+    public float replayMinDistance = 0f;
+
     [Header("Sound (S3Audio)")]
     [Tooltip("A shot that passes this close to the cup (metres, over it or beside it) and carries on plays the miss jingle.")]
     public float missRadius = 1.5f;
@@ -118,9 +129,23 @@ public class S3Golf : MonoBehaviour
     bool steepShot;                       // the last shot was hit steeply enough to be going over the pole
     readonly List<S3Laser.Block> solids = new List<S3Laser.Block>();   // what the ball bounces off: puzzle pieces and fences
     float stopTime = 1e6f;        // seconds since the ball last came to rest after a shot
+    // sinking it: the ball drops into the cup, the flag hops, a ring and confetti burst out, then the result card
+    float sinkTime;
+    Vector4 sinkFoot;             // where the ball was when the cup took it
+    string sinkName = "";         // "Birdie!" etc.
+    bool resultShown;
+    Matrix4x4 flagFrame;
+    S3Confetti confetti;
+    // instant replay of the hole (S3Replay)
+    S3Replay replay;
+    List<Vector4> track = new List<Vector4>();            // this shot's flight, one sample every S3Replay.Sample seconds
+    readonly List<List<Vector4>> holeShots = new List<List<Vector4>>();   // every shot on this hole, in order
+    float sinceSample, sinkLength;
+    Renderer sinkRingRenderer;
+    Mesh sinkRingMesh;
     int holeIndex, strokes, total;
     bool powerSelecting, exploring;
-    float power, powerPhase, accumulator, moveTime, sunkTimer, aimAngle;
+    float power, powerPhase, accumulator, moveTime, aimAngle;
     float shotMaxHeight;
     float startToCup, closestToCup;   // this shot's distance to the cup when hit, and the nearest it has come
     bool missed;                      // this shot has already played the miss jingle
@@ -140,9 +165,9 @@ public class S3Golf : MonoBehaviour
     Vector4 lowPos, flightDir;       // the low cinematic camera, and the ball's heading along the ground
     float highWeight;                // 0 = low camera, 1 = trailing camera
     Matrix4x4 followFrame;
-    string message = "";
-    float messageUntil;
-    Camera cam;
+    S3HudView hud;
+    int[] holeStrokes = Array.Empty<int>();   // strokes on each hole this round (0 = not played)
+    float lastPower = -1;                     // the last shot's power, ghosted on the meter
     // laser puzzles (Desert, Basin)
     S3Puzzle puzzle;
     int puzzleIndex;              // Desert: which puzzle
@@ -155,9 +180,6 @@ public class S3Golf : MonoBehaviour
     float advanceTimer;
     bool showHint;
     float hintUntil;
-    // level selector (L)
-    bool selecting;
-    string[][] levelLabels;       // per map in Maps order
     static readonly S3World.Biome[] Maps = { S3World.Biome.Meadow, S3World.Biome.Desert, S3World.Biome.Basin };
 
     S3World.Hole Hole => world.holes[holeIndex];
@@ -170,7 +192,13 @@ public class S3Golf : MonoBehaviour
     {
         world = S3World.Instance;
         if (!player) player = FindAnyObjectByType<S3Player>();
-        cam = player.GetComponent<Camera>();
+        hud = S3HudView.Ensure(gameObject, player);
+        hud.SetBiome(world.biome);
+        if (hud.Current == S3HudView.Menu.Results) hud.CloseMenu();
+        lastPower = -1;
+        CloseResult();
+        replay?.Dispose();
+        replay = null;
         player.cameraFilter = ViewFor;
         player.inputEnabled = false;
         exploring = false;
@@ -191,6 +219,7 @@ public class S3Golf : MonoBehaviour
             StartPuzzle(0);
             return;
         }
+        holeStrokes = new int[world.holes.Count];
         ball = NewBall(R);
         ball.radius = ballRadius;
         ConfigureBall(ball);
@@ -200,6 +229,11 @@ public class S3Golf : MonoBehaviour
         guideRenderer = world.CreateRenderer("Launch Guide", S3Scenery.GuideMesh(ballRadius), world.objectMaterial, Matrix4x4.identity).GetComponent<Renderer>();
         restMesh = S3Scenery.RingMesh(48, new Color(0.25f, 0.9f, 1f, 0.4f));
         restRenderer = world.CreateRenderer("Rest Ring", restMesh, world.objectMaterial, Matrix4x4.identity).GetComponent<Renderer>();
+        sinkRingMesh = S3Scenery.RingMesh(64, new Color(1f, 0.86f, 0.4f, 0.3f));
+        sinkRingRenderer = world.CreateRenderer("Sink Ring", sinkRingMesh, world.objectMaterial, Matrix4x4.identity).GetComponent<Renderer>();
+        sinkRingRenderer.enabled = false;
+        confetti = new S3Confetti(world);
+        if (Application.isPlaying) replay = new S3Replay(world, player.GetComponent<Camera>());
         stopTime = 1e6f;
         if (world.glowMaterial)
             beaconRenderer = world.CreateRenderer("Antipode Beacon", S3Scenery.BeaconMesh(), world.glowMaterial, Matrix4x4.identity).GetComponent<Renderer>();
@@ -220,7 +254,7 @@ public class S3Golf : MonoBehaviour
         exploring = true;
         player.inputEnabled = true;
         advancing = false;
-        ShowHint(14f);
+        showHint = false;   // the level's hint stays tucked away until you press H
         Say($"Puzzle {index + 1}/{world.levels.Count}\n{level.title}", 3f);
     }
 
@@ -240,7 +274,7 @@ public class S3Golf : MonoBehaviour
         locked = false;
         puzzle.OpenGate();
         S3Audio.Win();
-        Say($"{(Crystals > 1 ? "Crystals" : "Crystal")} lit!\nThe cup is open.", 3.5f);
+        Say($"{(Crystals > 1 ? "Crystals" : "Crystal")} lit!\nThe cup is open", 3.5f, true);
     }
 
     /// <summary>How many crystals the loaded lock has (some have two).</summary>
@@ -291,47 +325,97 @@ public class S3Golf : MonoBehaviour
     static string MapTitle(S3World.Biome b) =>
         b == S3World.Biome.Desert ? "Desert Oasis" : b == S3World.Biome.Basin ? "Eternal Poles" : "Meadow";
 
-    /// <summary>Opens or closes the level selector; the game (and the walker) is paused while it's up.</summary>
-    void SetSelecting(bool on)
+    bool MenuOpen => hud != null && (hud.Current == S3HudView.Menu.Pause || hud.Current == S3HudView.Menu.Levels);
+
+    /// <summary>The game (and the walker) is paused while the pause menu or level select is up.</summary>
+    void PauseForMenu()
     {
-        selecting = on;
-        player.paused = on;
-        if (!on) return;
+        player.paused = true;
         powerSelecting = false;
         Cursor.lockState = CursorLockMode.None;
         Cursor.visible = true;
-        levelLabels ??= BuildLevelLabels();
     }
 
-    string[][] BuildLevelLabels()
+    void OpenPause()
     {
-        string Hole(S3World.HoleDef h, int i)
+        PauseForMenu();
+        hud.ShowPause(world.HasGolf ? "Restart hole" : "Restart puzzle", CloseMenus, () => { CloseMenus(); Restart(); }, OpenLevels);
+    }
+
+    void OpenLevels()
+    {
+        PauseForMenu();
+        hud.ShowLevels(BuildLevelColumns(), Array.IndexOf(Maps, world.biome), world.HasGolf ? holeIndex : puzzleIndex, (m, i) => JumpTo(Maps[m], i));
+    }
+
+    /// <summary>Back to the game; a finished round goes back to its scorecard.</summary>
+    void CloseMenus()
+    {
+        hud.CloseMenu();
+        if (ball != null && state == State.Sunk && resultShown) { ShowResult(); return; }
+        player.paused = false;
+        Cursor.lockState = CursorLockMode.Locked;
+        Cursor.visible = false;
+        if (ball != null && state == State.Finished) ShowResults();
+    }
+
+    /// <summary>R: the current hole (or puzzle) from the start.</summary>
+    void Restart()
+    {
+        if (!world.HasGolf) { StartPuzzle(puzzleIndex); return; }
+        if (state == State.Sunk && resultShown) { ReplayHole(); return; }
+        if (state == State.Sunk || state == State.Finished) return;
+        total -= strokes;
+        StartHole(holeIndex);
+    }
+
+    S3HudView.LevelColumn[] BuildLevelColumns()
+    {
+        S3HudView.LevelEntry Hole(S3World.Biome map, S3World.HoleDef h, int i, string title)
         {
             float d = S3.Dist(S3.GroundPoint(h.tee.x, h.tee.y, R), S3.GroundPoint(h.cup.x, h.cup.y, R)) * R;
-            return $"Hole {i + 1}  ·  Par {h.par}  ·  {d:0} m";
+            return new S3HudView.LevelEntry(title ?? $"Hole {i + 1}", $"Par {h.par}  ·  {d:0} m", S3Progress.Best(map, i), false);
         }
-        var meadow = new string[world.course.Length];
-        for (int i = 0; i < meadow.Length; i++) meadow[i] = Hole(world.course[i], i);
-        var desert = new string[S3Levels.DesertOrder.Length];
+        var meadow = new S3HudView.LevelEntry[world.course.Length];
+        for (int i = 0; i < meadow.Length; i++) meadow[i] = Hole(S3World.Biome.Meadow, world.course[i], i, null);
+        var desert = new S3HudView.LevelEntry[S3Levels.DesertOrder.Length];
         for (int i = 0; i < desert.Length; i++)
-            desert[i] = $"Puzzle {i + 1}  ·  {S3Levels.Build(S3Levels.DesertOrder[i], Matrix4x4.identity, R).title}";
-        var basin = new string[world.basinCourse.Length];
+        {
+            var level = S3Levels.Build(S3Levels.DesertOrder[i], Matrix4x4.identity, R);
+            string Count(int n, string what) => n > 0 ? $"{n} {what}{(n > 1 ? "s" : "")}" : null;
+            string pieces = string.Join("  ·  ", new[] { Count(level.mirrors, "mirror"), Count(level.diffractors, "diffractor") }.Where(x => x != null));
+            desert[i] = new S3HudView.LevelEntry(level.title, pieces, S3Progress.Best(S3World.Biome.Desert, i), true);
+        }
+        var basin = new S3HudView.LevelEntry[world.basinCourse.Length];
         for (int i = 0; i < basin.Length; i++)
-            basin[i] = $"Hole {i + 1}  ·  Par {world.basinCourse[i].par}" +
-                       (i < world.basinLocks.Length ? $"  ·  {world.BuildLock(world.basinLocks[i]).title}" : "");
-        return new[] { meadow, desert, basin };
+            basin[i] = Hole(S3World.Biome.Basin, world.basinCourse[i], i, i < world.basinLocks.Length ? world.BuildLock(world.basinLocks[i]).title : null);
+        return new[]
+        {
+            new S3HudView.LevelColumn { title = MapTitle(S3World.Biome.Meadow), sub = "Golf", modifier = "", entries = meadow },
+            new S3HudView.LevelColumn { title = MapTitle(S3World.Biome.Desert), sub = "Laser puzzles", modifier = "level-col-head--desert", entries = desert },
+            new S3HudView.LevelColumn { title = MapTitle(S3World.Biome.Basin), sub = "Lasers and golf", modifier = "level-col-head--basin", entries = basin },
+        };
+    }
+
+    /// <summary>The scorecard at the end of a golf map.</summary>
+    void ShowResults()
+    {
+        var par = new int[world.holes.Count];
+        for (int i = 0; i < par.Length; i++) par[i] = world.holes[i].par;
+        bool meadow = world.biome == S3World.Biome.Meadow;
+        hud.ShowResults(meadow ? "Meadow complete" : world.biome == S3World.Biome.Basin ? "Campaign complete" : $"{world.MapName} complete",
+            par, holeStrokes,
+            meadow ? new[] { ("Enter", "On to the Desert Oasis") } : new[] { ("N", "Play again"), ("L", "Level select") });
     }
 
     /// <summary>Start a given hole (or Desert puzzle) on a map, from scratch.</summary>
     void JumpTo(S3World.Biome b, int index)
     {
-        SetSelecting(false);
+        CloseMenus();
         if (b != world.biome) { world.SetBiome(b); Init(); }   // rebuilding clears the old map's renderers
         advancing = false;
-        if (world.HasGolf) { total = 0; lockHole = -1; StartHole(index); }
+        if (world.HasGolf) { total = 0; lockHole = -1; holeStrokes = new int[world.holes.Count]; StartHole(index); }
         else StartPuzzle(index);
-        Cursor.lockState = CursorLockMode.Locked;
-        Cursor.visible = false;
     }
 
     void UpdateAdvance(float dt)
@@ -364,7 +448,8 @@ public class S3Golf : MonoBehaviour
         {
             S3Audio.Win();
             bool last = puzzleIndex + 1 >= world.levels.Count;
-            Say(last ? "ALL PUZZLES SOLVED\nNext: the Eternal Poles" : "CRYSTAL LIT!", 3.5f);
+            S3Progress.Record(world.biome, puzzleIndex, 1);
+            Say(last ? "All puzzles solved!\nNext: the Eternal Poles" : "Crystal lit!", 3.5f, true);
             AdvanceIn(last ? 4.5f : 3f);
         }
         UpdateAdvance(dt);
@@ -395,6 +480,7 @@ public class S3Golf : MonoBehaviour
 
     void StartHole(int index)
     {
+        if (hud != null && (hud.Current == S3HudView.Menu.Results || hud.Current == S3HudView.Menu.HoleDone)) hud.CloseMenu();
         holeIndex = index;
         strokes = 0;
         aimAngle = startAngle;
@@ -406,7 +492,15 @@ public class S3Golf : MonoBehaviour
         world.SetActiveCup(Hole.cup);
         world.SetActiveHole(index);
         Vector4 toTee = S3.DirTo(Hole.cup, Hole.tee);
-        S3World.SetFrame(flagRenderer, S3.FrameAt(Hole.cup, S3.EY, toTee == Vector4.zero ? S3.EZ : toTee));
+        flagFrame = S3.FrameAt(Hole.cup, S3.EY, toTee == Vector4.zero ? S3.EZ : toTee);
+        S3World.SetFrame(flagRenderer, flagFrame);
+        CloseResult();
+        replay?.End();
+        track = new List<Vector4>();
+        holeShots.Clear();
+        sinkTime = 0;
+        confetti?.Hide();
+        if (sinkRingRenderer) sinkRingRenderer.enabled = false;
         aimDir = viewDir = DirectionToCup();
         lookPitch = 0;
         exploring = false;
@@ -437,7 +531,7 @@ public class S3Golf : MonoBehaviour
             (dist > 0.97f * Mathf.PI * R ? "\nThe cup is at your antipode: every direction leads there." : "") +
             (!locked && world.holeFences.ContainsKey(index) ? "\nThe green is fenced off on this side: come in from behind, over the pole or round the world." : "") +
             (locked ? $"\nSealed in ice: light {TheCrystal}. F to golf whenever you're ready." : ""), 5.5f);
-        if (locked) ShowHint(10f);
+        showHint = false;
         UpdateVisuals();
     }
 
@@ -450,13 +544,24 @@ public class S3Golf : MonoBehaviour
         return d;
     }
 
+    /// <summary>Near the cup but not on it: the aim a shot leaves you with, a few degrees to one side.</summary>
+    Vector4 RoughDirectionToCup()
+    {
+        float off = UnityEngine.Random.Range(autoAimOffsetMin, autoAimOffsetMax) * (UnityEngine.Random.value < 0.5f ? -1 : 1);
+        return Turned(DirectionToCup(), ball.Foot, off * Mathf.Deg2Rad);
+    }
+
     void Update()
     {
         if (world == null) return;
+        if (replay != null && replay.Active) { UpdateReplay(); return; }   // it takes the whole screen; nothing else moves
         var keys = Keyboard.current;
-        if (keys != null && (keys.lKey.wasPressedThisFrame || (selecting && keys.escapeKey.wasPressedThisFrame)))
-            SetSelecting(!selecting);
-        if (selecting) return;
+        if (keys != null)
+        {
+            if (keys.lKey.wasPressedThisFrame) { if (hud.Current == S3HudView.Menu.Levels) CloseMenus(); else OpenLevels(); }
+            else if (keys.escapeKey.wasPressedThisFrame) { if (MenuOpen) CloseMenus(); else OpenPause(); }
+        }
+        if (MenuOpen) return;
         if (!world.HasGolf) { if (puzzle != null) UpdatePuzzleMap(Time.deltaTime); return; }
         if (ball == null) return;
         var kb = Keyboard.current;
@@ -476,15 +581,15 @@ public class S3Golf : MonoBehaviour
                 {
                     // standing at the ball: aim where you were facing as you walked up; from afar: at the cup
                     Vector4 facing = NearBall ? S3.Ortho(player.Forward, ball.Foot, S3.EY) : Vector4.zero;
-                    aimDir = viewDir = facing != Vector4.zero ? facing : DirectionToCup();
+                    aimDir = viewDir = facing != Vector4.zero ? facing : RoughDirectionToCup();
                     lookPitch = 0;
                     GlideToBall();
                     S3Audio.Click();
                 }
             }
             if (kb.mKey.wasPressedThisFrame) { GoToMap(NextMap(world.biome)); return; }
-            if (kb.rKey.wasPressedThisFrame && state != State.Sunk && state != State.Finished) { total -= strokes; StartHole(holeIndex); }
-            if (kb.nKey.wasPressedThisFrame) { total = 0; lockHole = -1; advancing = false; StartHole(0); }
+            if (kb.rKey.wasPressedThisFrame) Restart();
+            if (kb.nKey.wasPressedThisFrame) { total = 0; lockHole = -1; advancing = false; holeStrokes = new int[world.holes.Count]; StartHole(0); }
             if (kb.hKey.wasPressedThisFrame && puzzle != null) { if (showHint && Time.realtimeSinceStartup < hintUntil) showHint = false; else ShowHint(1e6f); }
             if (kb.enterKey.wasPressedThisFrame && advancing) advanceTimer = 0;
             if (kb.bKey.wasPressedThisFrame && (state == State.Ready || state == State.Moving) && strokes > 0)
@@ -494,10 +599,10 @@ public class S3Golf : MonoBehaviour
                 followWeight = 0;
                 powerSelecting = false;
                 strokes++; total++;
-                aimDir = viewDir = DirectionToCup();
+                aimDir = viewDir = RoughDirectionToCup();
                 lookPitch = 0;
                 GlideToBall();
-                Say("Ball returned (+1 stroke)", 2.5f);
+                Say("Ball returned\n+1 stroke", 2.5f);
             }
             if (kb.spaceKey.wasPressedThisFrame && state == State.Ready && !exploring && !gliding)
             {
@@ -525,7 +630,7 @@ public class S3Golf : MonoBehaviour
             viewDir = aimDir;
             aimAngle = Mathf.Clamp(aimAngle + lift * heightDegreesPerSecond * fine * dt, minAngle, maxAngle);
             // mouse up/down only tilts the view
-            lookPitch = Mathf.Clamp(lookPitch + md.y * player.lookSensitivity, -1.45f - CameraPitch(), 1.45f - CameraPitch());
+            lookPitch = Mathf.Clamp(lookPitch + md.y * player.lookSensitivity, -1.45f - CameraPitch(), MaxViewPitch - CameraPitch());
             if (kb != null && kb.cKey.wasPressedThisFrame) lookPitch = 0;
             if (powerSelecting)
             {
@@ -541,26 +646,16 @@ public class S3Golf : MonoBehaviour
         {
             case State.Moving: Simulate(dt); break;
             case State.Sunk:
-                sunkTimer -= dt;
-                if (sunkTimer <= 0)
+                sinkTime += dt;
+                if (!resultShown && sinkTime >= resultDelay) ShowResult();
+                else if (resultShown && kb != null)
                 {
-                    if (holeIndex + 1 < world.holes.Count) StartHole(holeIndex + 1);
-                    else
-                    {
-                        state = State.Finished;
-                        int par = 0;
-                        foreach (var h in world.holes) par += h.par;
-                        if (world.biome == S3World.Biome.Meadow)
-                        {
-                            Say($"Meadow complete!\n{total} strokes (par {par})  ·  next: the Desert", 6f);
-                            AdvanceIn(6f);
-                        }
-                        else Say((world.biome == S3World.Biome.Basin ? "Campaign complete!" : $"{world.MapName} complete!") +
-                                 $"\n{total} strokes (par {par})  ·  N play again  ·  L choose a level", 1e6f);
-                    }
+                    if (kb.wKey.wasPressedThisFrame && CanWatchReplay) WatchReplay();
+                    else if (kb.enterKey.wasPressedThisFrame || kb.numpadEnterKey.wasPressedThisFrame || kb.spaceKey.wasPressedThisFrame) NextHole();
                 }
                 break;
         }
+        UpdateSinkEffects(dt);
         if (puzzle != null)
         {
             puzzle.Update(dt, exploring && mouseLocked && state != State.Finished);
@@ -639,6 +734,7 @@ public class S3Golf : MonoBehaviour
     void Shoot(float p)
     {
         powerSelecting = false;
+        lastPower = p;
         lastShot = ball.Foot;
         ball.Launch(ShotDirection, LaunchSpeed(p, R), aimAngle * Mathf.Deg2Rad);
         steepShot = aimAngle >= 60;
@@ -650,6 +746,9 @@ public class S3Golf : MonoBehaviour
         wasGrounded = false;
         startToCup = closestToCup = S3.Dist(ball.Foot, Hole.cup) * R;
         missed = false;
+        track = new List<Vector4> { ball.pos };
+        holeShots.Add(track);
+        sinceSample = 0;
         SetExploring(true);   // watch it go; the camera glides to it once it stops
     }
 
@@ -665,6 +764,8 @@ public class S3Golf : MonoBehaviour
         {
             accumulator -= Step;
             ball.Step(Step, friction, world.obstacles, solids);
+            sinceSample += Step;
+            if (sinceSample >= S3Replay.Sample) { sinceSample -= S3Replay.Sample; track.Add(ball.pos); }
             S3Audio.Land(ball.impact);
             if (locked) CollideBarrier();
             shotMaxHeight = Mathf.Max(shotMaxHeight, ball.HeightM - ballRadius);
@@ -682,11 +783,16 @@ public class S3Golf : MonoBehaviour
             if (!locked && toCup < world.cupRadius && ball.HeightM < ballRadius * 1.3f)
             {
                 state = State.Sunk;
-                sunkTimer = 3f;
+                sinkTime = 0;
+                sinkFoot = ball.Foot;
+                track.Add(ball.pos);
+                sinkLength = world.GroundDistance(lastShot, ball.Foot);
                 int diff = strokes - Hole.par;
-                string name = strokes == 1 ? "HOLE IN ONE!" :
-                    diff <= -2 ? "Eagle!" : diff == -1 ? "Birdie!" : diff == 0 ? "Par" : diff == 1 ? "Bogey" : $"+{diff}";
-                Say($"{name}\nSunk in {strokes}", 3f);
+                sinkName = strokes == 1 ? "Hole in one!" :
+                    diff <= -2 ? "Eagle!" : diff == -1 ? "Birdie!" : diff == 0 ? "Par" : diff == 1 ? "Bogey" : diff == 2 ? "Double bogey" : $"+{diff}";
+                holeStrokes[holeIndex] = strokes;
+                S3Progress.Record(world.biome, holeIndex, strokes);
+                hud.HideBanner();
                 S3Audio.Sunk(strokes, Hole.par);
                 return;
             }
@@ -705,11 +811,136 @@ public class S3Golf : MonoBehaviour
                 stopTime = 0;
                 QueueGlide();
                 if (shotMaxHeight > 0.5f * Mathf.PI * R - 1f && world.GroundDistance(lastShot, ball.Foot) > 0.5f * Mathf.PI * R)
-                    Say("Over the pole!\nIt came down on the far side of the world.", 3.5f);
+                    Say("Over the pole!\nIt came down on the far side of the world", 3.5f, true);
                 return;
             }
         }
         if (moveTime > 40f) { ball.vel = Vector4.zero; state = State.Ready; stopTime = 0; QueueGlide(); }
+    }
+
+    // ------------------------------------------------------------------ sinking it
+
+    const float BurstAt = 0.3f;   // seconds after the ball reaches the cup: it has dropped out of sight
+
+    /// <summary>The hole-complete card: free the mouse for its buttons and hold the walker still.</summary>
+    void ShowResult()
+    {
+        resultShown = true;
+        player.paused = true;
+        Cursor.lockState = CursorLockMode.None;
+        Cursor.visible = true;
+        bool last = holeIndex + 1 >= world.holes.Count;
+        hud.ShowHoleResult(holeIndex + 1, sinkName, strokes <= Hole.par,
+            $"{strokes} {(strokes == 1 ? "stroke" : "strokes")}  ·  Par {Hole.par}  ·  Total {total}",
+            CanWatchReplay ? WatchReplay : null, ReplayHole, NextHole, last ? "Finish" : "Next hole");
+    }
+
+    void CloseResult()
+    {
+        if (!resultShown) return;
+        resultShown = false;
+        if (hud != null && hud.Current == S3HudView.Menu.HoleDone) hud.CloseMenu();
+        player.paused = false;
+        Cursor.lockState = CursorLockMode.Locked;
+        Cursor.visible = false;
+    }
+
+    /// <summary>Play the hole just sunk again; its strokes come off the total.</summary>
+    void ReplayHole()
+    {
+        total -= strokes;
+        holeStrokes[holeIndex] = 0;
+        StartHole(holeIndex);
+    }
+
+    /// <summary>On to the next hole, or the map's scorecard after the last one.</summary>
+    void NextHole()
+    {
+        CloseResult();
+        if (holeIndex + 1 < world.holes.Count) { StartHole(holeIndex + 1); return; }
+        state = State.Finished;
+        ShowResults();
+        if (world.biome == S3World.Biome.Meadow) AdvanceIn(10f);
+    }
+
+    /// <summary>The flag hops and wobbles, a gold ring spreads over the green, and confetti bursts out of the cup.</summary>
+    void UpdateSinkEffects(float dt)
+    {
+        if (confetti == null) return;
+        bool sunk = state == State.Sunk;
+        if (sunk && sinkTime >= BurstAt && sinkTime - dt < BurstAt)
+        {
+            confetti.Burst(S3.FrameAt(Hole.cup, S3.EY, S3.EZ));
+            S3Audio.Click();
+        }
+        confetti.Update(dt);
+
+        float u = sinkTime - BurstAt;
+        float ring = u / 0.9f;
+        sinkRingRenderer.enabled = sunk && ring > 0 && ring < 1;
+        if (sinkRingRenderer.enabled)
+        {
+            float e = 1 - (1 - ring) * (1 - ring) * (1 - ring);
+            S3Scenery.SetRing(sinkRingMesh, Mathf.Lerp(0.3f, world.greenRadius, e), 0.35f * (1 - ring));
+            S3World.SetFrame(sinkRingRenderer, S3.FrameAt(Hole.cup, S3.EY, S3.EZ));
+        }
+
+        Matrix4x4 f = flagFrame;
+        if (sunk && u > 0)
+        {
+            float hop = u < 0.45f ? 0.4f * Mathf.Sin(Mathf.PI * u / 0.45f) : 0;
+            float wobble = 0.22f * Mathf.Exp(-3.5f * u) * Mathf.Sin(16f * u);
+            f = flagFrame * S3.PlaneRotation(S3.EW, S3.EY, hop / R) * S3.PlaneRotation(S3.EY, S3.EX, wobble);
+        }
+        S3World.SetFrame(flagRenderer, f);
+    }
+
+    /// <summary>The ball rolling to the middle of the cup and dropping in, spinning.</summary>
+    Matrix4x4 SinkFrame()
+    {
+        float slide = Mathf.SmoothStep(0, 1, sinkTime / 0.2f);
+        float fall = Mathf.Clamp01((sinkTime - 0.06f) / 0.3f);
+        float depth = 2.6f * ballRadius * fall * fall;
+        Vector4 d = S3.DirTo(sinkFoot, Hole.cup);
+        Vector4 foot = d == Vector4.zero ? sinkFoot : S3.Walk(sinkFoot, d, S3.Dist(sinkFoot, Hole.cup) * slide);
+        Vector4 c = S3.Lift(foot, (ballRadius - depth) / R);
+        return S3.FrameAt(c, S3.UpAt(c), d == Vector4.zero ? S3.Ortho(S3.EZ, c, S3.EY) : d) * S3.PlaneRotation(S3.EZ, S3.EY, sinkTime * 9f);
+    }
+
+    // ------------------------------------------------------------------ instant replay
+
+    bool CanWatchReplay => replay != null && holeShots.Exists(s => s.Count > 1) && sinkLength >= replayMinDistance;
+
+    /// <summary>Watch every shot of the hole again, from outside the world, each tracing its path (the mouse orbits; click to come back).</summary>
+    void WatchReplay()
+    {
+        Mesh fence = world.fenceRenderers.TryGetValue(holeIndex, out var r) && r ? r.GetComponent<MeshFilter>().sharedMesh : null;
+        replay.Begin(holeShots, Hole.cup, flagFrame, fence);
+        Cursor.lockState = CursorLockMode.Locked;
+        Cursor.visible = false;
+        S3Audio.Click();
+    }
+
+    void UpdateReplay()
+    {
+        var kb = Keyboard.current;
+        var mouse = Mouse.current;
+        Vector2 md = mouse != null && Cursor.lockState == CursorLockMode.Locked ? mouse.delta.ReadValue() : Vector2.zero;
+        replay.Update(Time.deltaTime, md);
+        bool leave = (mouse != null && mouse.leftButton.wasPressedThisFrame) ||
+                     (kb != null && (kb.escapeKey.wasPressedThisFrame || kb.wKey.wasPressedThisFrame || kb.enterKey.wasPressedThisFrame));
+        if (!leave || replay.Age < 0.25f) return;
+        // back to the hole-complete card
+        replay.End();
+        Cursor.lockState = CursorLockMode.None;
+        Cursor.visible = true;
+        S3Audio.Click();
+    }
+
+    string ReplayLine()
+    {
+        string shots = replay.Shots > 1 ? $"Shot {replay.CurrentShot + 1} of {replay.Shots}" : "One shot";
+        return $"Hole {holeIndex + 1}  ·  {shots}  ·  {S3Replay.Speed}× speed";
     }
 
     // ------------------------------------------------------------------ cameras
@@ -717,14 +948,26 @@ public class S3Golf : MonoBehaviour
     /// <summary>ed3vv's pitch rule: tilt up as the launch height rises, keeping the ball in view.</summary>
     float CameraPitch() => Mathf.Clamp(-0.30f + 0.26f * (aimAngle - 24f) * Mathf.Deg2Rad, -0.85f, 0.42f);
 
-    /// <summary>The standing golfer view: behind the ball along viewDir, looking past it.</summary>
+    /// <summary>The view may tilt all the way up, to look straight over the pole.</summary>
+    const float MaxViewPitch = Mathf.PI / 2;
+    /// <summary>From this view pitch (radians, about 66°) up to straight up, the camera eases forward to stand over the ball.</summary>
+    const float OverheadFrom = 1.15f;
+
+    /// <summary>0 normally, 1 when the ball camera looks straight up and stands right over the ball.</summary>
+    float Overhead => Mathf.SmoothStep(0, 1, Mathf.InverseLerp(OverheadFrom, MaxViewPitch, CameraPitch() + lookPitch));
+
+    /// <summary>
+    /// The standing golfer view: behind the ball along viewDir, looking past it. Tilted towards straight up it
+    /// eases forward until it stands right over the ball, because straight up from there is exactly the ball's
+    /// antipode, where a straight-up shot comes down (from behind the ball, the antipode shows up far off to one side).
+    /// </summary>
     Matrix4x4 BallCamera()
     {
         Vector4 foot = ball.Foot;
         if (state == State.Sunk || state == State.Finished) foot = Hole.cup;
         Vector4 dir = S3.Ortho(viewDir, foot, S3.EY);
         if (dir == Vector4.zero) dir = DirectionToCup();
-        float back = cameraBack / R;
+        float back = cameraBack * (1 - Overhead) / R;
         Vector4 camFoot = S3.Walk(foot, -dir, back);
         Vector4 fwd = Mathf.Sin(back) * foot + Mathf.Cos(back) * dir;   // transported heading
         return S3.FrameAt(camFoot, S3.EY, fwd)
@@ -886,7 +1129,7 @@ public class S3Golf : MonoBehaviour
             glideWait -= dt;
             if (glideWait <= 0)
             {
-                aimDir = viewDir = DirectionToCup();
+                aimDir = viewDir = RoughDirectionToCup();
                 lookPitch = 0;
                 GlideToBall();
             }
@@ -939,8 +1182,9 @@ public class S3Golf : MonoBehaviour
 
     void UpdateVisuals()
     {
-        ballRenderer.enabled = state != State.Sunk && state != State.Finished;
-        S3World.SetFrame(ballRenderer, ball.frame);
+        bool sinking = state == State.Sunk;
+        ballRenderer.enabled = (!sinking || sinkTime < BurstAt + 0.1f) && state != State.Finished;
+        S3World.SetFrame(ballRenderer, sinking ? SinkFrame() : ball.frame);
         // the ball has stopped: it flashes, and a ring closes in on it and stays while you walk over
         S3World.SetLook(ballRenderer, 1.2f * Mathf.Clamp01(1 - stopTime / 0.8f), 0, Color.white);
         restRenderer.enabled = state == State.Ready && exploring;
@@ -955,6 +1199,7 @@ public class S3Golf : MonoBehaviour
         UpdateAntipodes(aiming);
         Vector4 d = ShotDirection;
         arrowRenderer.enabled = guideRenderer.enabled = aiming && d != Vector4.zero;
+        guideRenderer.enabled &= Overhead < 0.3f;   // standing over the ball, the camera would look up through the guide's dots
         if (!arrowRenderer.enabled) return;
         S3World.SetFrame(arrowRenderer, S3.FrameAt(ball.Foot, S3.EY, d));
         S3World.SetFrame(guideRenderer, S3.FrameAt(ball.pos, S3.UpAt(ball.pos), d) *
@@ -989,11 +1234,8 @@ public class S3Golf : MonoBehaviour
         r.SetPropertyBlock(glowBlock);
     }
 
-    void Say(string text, float seconds)
-    {
-        message = text;
-        messageUntil = Time.realtimeSinceStartup + seconds;
-    }
+    /// <summary>The centre banner; celebrate makes it the gold one.</summary>
+    void Say(string text, float seconds, bool celebrate = false) => hud?.Banner(text, seconds, celebrate);
 
     /// <summary>Meter position whose shot just carries straight up over the pole.</summary>
     float PoleCrossingPower()
@@ -1048,159 +1290,82 @@ public class S3Golf : MonoBehaviour
     public string DebugState =>
         $"state {state}, ball height {ball.HeightM:0.0} m, ground distance from tee {world.GroundDistance(ball.Foot, Hole.tee):0.0} m, follow {followWeight:0.00}";
 
-    // ------------------------------------------------------------------ HUD (drawn with S3Hud)
+    // ------------------------------------------------------------------ HUD (S3HudView, UI Toolkit)
 
-    void OnGUI()
+    readonly List<(string, string)> hudChips = new List<(string, string)>();
+    readonly List<(string, string)> hudHints = new List<(string, string)>();
+
+    /// <summary>Pushes this frame's state to the HUD (after the camera has moved, so markers line up).</summary>
+    void LateUpdate()
     {
-        if (world == null || (ball == null && puzzle == null)) return;
-        S3Hud.Begin();
-        float w = S3Hud.Width, h = S3Hud.Height;
-        if (selecting) { DrawLevelSelect(w, h); return; }
-
-        DrawWaypoint();
+        if (world == null || hud == null || (ball == null && puzzle == null)) return;
+        bool replaying = replay != null && replay.Active;
+        hud.SetReplay(replaying, replaying ? ReplayLine() : null, replaying ? replay.Progress : 0);
+        bool covered = replaying || MenuOpen || hud.Current == S3HudView.Menu.Results || hud.Current == S3HudView.Menu.HoleDone;
+        hud.SetHudVisible(!covered);
+        if (covered) return;
         bool mouseFree = Cursor.lockState != CursorLockMode.Locked;
-        var hints = new List<S3Hud.Hint>();
-        string note = mouseFree ? "Click to play" : null;
+
+        hud.BeginMarkers();
+        if (!MenuOpen) Waypoints();
+        hud.EndMarkers();
+
+        hudChips.Clear();
+        hudHints.Clear();
+        string note = null;
         if (ball == null)
         {
             // the Desert: puzzles on foot
-            DrawScorecard(world.MapName, $"Puzzle {puzzleIndex + 1} / {world.levels.Count}", puzzle.Level?.title);
-            DrawPuzzleHud(w, h);
-            if (!puzzle.Solved) { hints.Add(new S3Hud.Hint("LMB", "Place")); hints.Add(new S3Hud.Hint("Q E", "Turn")); hints.Add(new S3Hud.Hint("H", "Hint")); }
+            hudChips.Add((puzzle.Level?.title ?? "", null));
+            hud.SetScorecard(world.MapName, $"Puzzle {puzzleIndex + 1}", $"/ {world.levels.Count}", world.levels.Count, puzzleIndex, hudChips, null);
+            hud.SetStats(-1, -1);
+            hud.SetPower(false, 0, -1, -1);
+            PuzzleHud();
+            if (!puzzle.Solved) { hudHints.Add(("LMB", "Place")); hudHints.Add(("Q E", "Turn")); hudHints.Add(("H", HintVisible ? "Hide hint" : "Hint")); }
         }
         else
         {
             bool aiming = state == State.Ready && !exploring;
-            DrawScorecard(world.MapName, $"Hole {holeIndex + 1} / {world.holes.Count}", $"Par {Hole.par}   ·   Stroke {strokes}   ·   Total {total}", locked);
-            DrawStats(w, aiming);
-            if (puzzle != null) DrawPuzzleHud(w, h);
+            hudChips.Add(("Par", $"{Hole.par}"));
+            hudChips.Add(("Stroke", $"{strokes}"));
+            hudChips.Add(("Total", $"{total}"));
+            hud.SetScorecard(world.MapName, $"Hole {holeIndex + 1}", $"/ {world.holes.Count}", world.holes.Count, holeIndex, hudChips,
+                             locked ? $"Cup sealed  ·  light {TheCrystal}" : null);
+            hud.SetStats(world.GroundDistance(ball.Foot, Hole.cup), aiming ? aimAngle : -1);
+            if (puzzle != null) PuzzleHud();
+            else { hud.SetCrosshair(false, false); hud.SetInventory(false, 0, 0, 0, 0, true); hud.SetStatus(null); hud.SetHintCard(false, null, null); }
             string key = puzzle == null ? "E" : "F";
-            if (note != null || gliding || glidePending) { }
+            if (gliding || glidePending) { }
             else if (aiming && !powerSelecting && world.GroundDistance(ball.Foot, -Hole.cup) < world.greenRadius)
                 note = "On the flag's antipode: hit it straight up at full power and it comes down on the green";
-            else if (aiming && powerSelecting) { hints.Add(new S3Hud.Hint("Space", "Shoot")); hints.Add(new S3Hud.Hint("RMB", "Cancel")); }
-            else if (aiming) { hints.Add(new S3Hud.Hint("A D", "Aim")); hints.Add(new S3Hud.Hint("W S", "Height")); hints.Add(new S3Hud.Hint("Space", "Power")); }
+            else if (aiming && powerSelecting) { hudHints.Add(("Space", "Shoot")); hudHints.Add(("RMB", "Cancel")); }
+            else if (aiming) { hudHints.Add(("A D", "Aim")); hudHints.Add(("W S", "Height")); hudHints.Add(("Space", "Power")); hudHints.Add(("Tab", "Walk")); }
             else if (state == State.Ready)
             {
-                hints.Add(new S3Hud.Hint(key, NearBall ? "Address ball" : "Back to ball"));
-                if (locked) { hints.Add(new S3Hud.Hint("LMB", "Place")); hints.Add(new S3Hud.Hint("Q E", "Turn")); }
+                hudHints.Add((key, NearBall ? "Address ball" : "Back to ball"));
+                if (locked) { hudHints.Add(("LMB", "Place")); hudHints.Add(("Q E", "Turn")); hudHints.Add(("H", HintVisible ? "Hide hint" : "Hint")); }
             }
-            if (powerSelecting) DrawPowerMeter(w, h);
+            hud.SetPower(powerSelecting, power, aimAngle > 75 ? PoleCrossingPower() : -1, lastPower);
         }
-        if (note != null) S3Hud.Note(w / 2, h - 46, note);
-        else S3Hud.Hints(w / 2, h - 46, hints);
-        DrawFooter(h);
-        DrawMessage(w, MessageY(h));
-    }
-
-    /// <summary>Top left: the map, the hole (or puzzle), and the score.</summary>
-    void DrawScorecard(string map, string title, string line, bool sealedCup = false)
-    {
-        const float x = 24, y = 24, pad = 20;
-        bool hasLine = !string.IsNullOrEmpty(line);
-        float textW = Mathf.Max(S3Hud.Measure(title, S3Hud.Heading).x, hasLine ? S3Hud.Measure(line, S3Hud.Body).x : 0);
-        float cw = Mathf.Max(230, textW + 2 * pad), ch = hasLine ? 108 : 80;
-        S3Hud.Panel(new Rect(x, y, cw, ch));
-        S3Hud.Text(new Rect(x + pad, y + 16, cw, 16), map.ToUpperInvariant(), S3Hud.Eyebrow, S3Hud.Accent, false);
-        S3Hud.Text(new Rect(x + pad, y + 34, cw, 36), title, S3Hud.Heading, S3Hud.Ink, false);
-        if (hasLine) S3Hud.Text(new Rect(x + pad, y + 74, cw, 22), line, S3Hud.Body, S3Hud.Dim, false);
-        if (!sealedCup) return;
-        string s = $"Cup sealed  ·  light {TheCrystal}";
-        float sw = S3Hud.Measure(s, S3Hud.Small).x + 32;
-        var r = new Rect(x, y + ch + 10, sw, 32);
-        S3Hud.Pill(r, new Color(0.22f, 0.45f, 0.70f, 0.8f));
-        S3Hud.Text(new Rect(r.x + 16, r.y + 7, sw, 18), s, S3Hud.Small, S3Hud.Ink, false);
-    }
-
-    /// <summary>Top right: distance to the pin, and the launch angle while you aim.</summary>
-    void DrawStats(float w, bool aiming)
-    {
-        const float colW = 108, pad = 20;
-        int n = aiming ? 2 : 1;
-        var r = new Rect(w - 24 - (n * colW + pad), 24, n * colW + pad, 80);
-        S3Hud.Panel(r);
-        void Stat(int i, string label, string value)
-        {
-            float x = r.x + pad + i * colW;
-            S3Hud.Text(new Rect(x, r.y + 16, colW, 16), label, S3Hud.Eyebrow, S3Hud.Dim, false);
-            S3Hud.Text(new Rect(x, r.y + 34, colW, 36), value, S3Hud.Heading, S3Hud.Ink, false);
-        }
-        Stat(0, "PIN", $"{world.GroundDistance(ball.Foot, Hole.cup):0} m");
-        if (aiming) Stat(1, "LAUNCH", $"{aimAngle:0}°");
-    }
-
-    void DrawPowerMeter(float w, float h)
-    {
-        const float bw = 400, bh = 14;
-        // just a slim bar and its labels, no card: steep shots tilt the view up and put the ball down here
-        float x = w / 2 - bw / 2, y = h - 100;
-        S3Hud.Text(new Rect(x, y - 24, bw, 16), "POWER", S3Hud.Eyebrow, S3Hud.Ink);
-        string pct = $"{power * 100:0}%";
-        float pw = S3Hud.Measure(pct, S3Hud.BodyBold).x;
-        S3Hud.Text(new Rect(x + bw - pw, y - 27, pw + 2, 22), pct, S3Hud.BodyBold, S3Hud.Ink);
-        S3Hud.Bar(new Rect(x - 3, y - 3, bw + 6, bh + 6), new Color(0.06f, 0.08f, 0.12f, 0.7f));
-        S3Hud.Bar(new Rect(x, y, bw, bh), new Color(1, 1, 1, 0.12f));
-        Color mid = new Color(1f, 0.82f, 0.30f);
-        Color fill = power < 0.5f ? Color.Lerp(new Color(0.36f, 0.86f, 0.46f), mid, power * 2) : Color.Lerp(mid, new Color(1f, 0.34f, 0.26f), power * 2 - 1);
-        if (power > 0.005f) S3Hud.Bar(new Rect(x, y, Mathf.Max(bh, bw * power), bh), fill);
-        float poleMark = PoleCrossingPower();
-        if (aimAngle > 75 && poleMark <= 1)
-        {
-            float px = x + bw * poleMark;
-            GUI.color = new Color(1, 1, 1, 0.9f);
-            GUI.DrawTexture(new Rect(px - 1, y - 5, 2, bh + 10), Texture2D.whiteTexture);
-            GUI.color = Color.white;
-            S3Hud.Centered(px, y + bh + 14, "OVER THE POLE", S3Hud.Eyebrow, S3Hud.Ink, true);
-        }
-    }
-
-    /// <summary>The one permanent reminder: everything else lives in the L menu.</summary>
-    void DrawFooter(float h)
-    {
-        float kw = S3Hud.Key(24, h - 36, "L");
-        S3Hud.Text(new Rect(24 + kw + 10, h - 47, 300, 22), "Levels & controls", S3Hud.Small, S3Hud.Dim);
-    }
-
-    /// <summary>The centre message, on its own card: the first line big, the rest smaller underneath. It fades out at the end.</summary>
-    void DrawMessage(float w, float y)
-    {
-        float left = messageUntil - Time.realtimeSinceStartup;
-        if (left <= 0 || message.Length == 0) return;
-        var lines = message.Split('\n');
-        float textW = S3Hud.Measure(lines[0], S3Hud.Title).x;
-        for (int i = 1; i < lines.Length; i++) textW = Mathf.Max(textW, S3Hud.Measure(lines[i], S3Hud.Sub).x);
-        float cw = Mathf.Min(w - 48, textW + 80), ch = 80 + 30 * (lines.Length - 1) + (lines.Length > 1 ? 12 : 0);
-        var c = GUI.color;
-        GUI.color = new Color(1, 1, 1, Mathf.Clamp01(left / 0.35f));
-        S3Hud.Panel(new Rect(w / 2 - cw / 2, y, cw, ch), 1.3f);
-        S3Hud.Text(new Rect(0, y + 12, w, 56), lines[0], S3Hud.Title, S3Hud.Ink, false);
-        for (int i = 1; i < lines.Length; i++)
-            S3Hud.Text(new Rect(0, y + 68 + 30 * (i - 1), w, 28), lines[i], S3Hud.Sub, S3Hud.Dim, false);
-        GUI.color = c;
+        hud.SetPrompt(mouseFree && !MenuOpen);
+        hud.SetHints(note, hudHints);
     }
 
     /// <summary>
-    /// Waypoints: the flag (always) and your ball (whenever you're not addressing it), each with
-    /// its distance from you. Targets are projected exactly like the shader projects geometry;
-    /// off screen (or behind you) a marker sticks to the screen edge, pointing the way.
+    /// Waypoints: the crystals still dark, the flag (always), the antipode while aiming steeply, and your
+    /// ball whenever you're not addressing it, each with its distance from you.
     /// </summary>
-    void DrawWaypoint()
+    void Waypoints()
     {
         if (state == State.Finished) return;
-        // the crystals still to light (Desert, and a sealed Eternal Poles cup)
         if (puzzle != null && (ball == null || locked) && !puzzle.Solved)
             foreach (var goal in puzzle.UnlitGoals)
-            {
-                Vector4 g = goal.position;
-                DrawMarker(S3.Lift(g, 2.1f / R), new Color(0.80f, 0.64f, 1f), $"{world.GroundDistance(player.Foot, g):0} m", S3Hud.Diamond);
-            }
+                hud.Marker(S3.Lift(goal.position, 2.1f / R), S3HudView.MarkerKind.Gem, $"{world.GroundDistance(player.Foot, goal.position):0} m");
         if (ball == null) return;
-        DrawMarker(S3.Lift(Hole.cup, 2.9f / R), S3Hud.Accent, $"{world.GroundDistance(player.ViewFrame().GetColumn(3), Hole.cup):0} m", S3Hud.Triangle);
+        hud.Marker(S3.Lift(Hole.cup, 2.9f / R), S3HudView.MarkerKind.Cup, $"{world.GroundDistance(player.ViewFrame().GetColumn(3), Hole.cup):0} m");
         if (state == State.Ready && !exploring && Steepness > 0)
-        {
-            var c = new Color(S3Hud.Ice.r, S3Hud.Ice.g, S3Hud.Ice.b, Steepness);
-            DrawMarker(S3.Lift(-ball.Foot, 2.2f / R), c, $"Over the pole  ·  {world.GroundDistance(-ball.Foot, Hole.cup):0} m from the pin", S3Hud.Ring);
-        }
+            hud.Marker(S3.Lift(-ball.Foot, 2.2f / R), S3HudView.MarkerKind.Pole,
+                       $"Over the pole  ·  {world.GroundDistance(-ball.Foot, Hole.cup):0} m from the pin", Steepness);
         if (exploring && state != State.Sunk && followWeight < 0.5f && !gliding)   // no marker on the ball the camera is following
         {
             // the ball's marker says what it's doing, and pops when it comes to rest
@@ -1208,156 +1373,22 @@ public class S3Golf : MonoBehaviour
             bool resting = state == State.Ready;
             string label = !resting ? (ball.grounded ? "Rolling" : "In the air") : stopTime < 2.5f ? $"Stopped  ·  {d:0} m" : $"{d:0} m";
             float pop = resting ? 1 + 0.6f * Mathf.Clamp01(1 - stopTime / 0.45f) : 0.85f;
-            DrawMarker(S3.Lift(ball.Foot, (ballRadius * 2 + 0.5f) / R), new Color(0.55f, 0.95f, 1f), label, S3Hud.Circle, pop);
+            hud.Marker(S3.Lift(ball.Foot, (ballRadius * 2 + 0.5f) / R), S3HudView.MarkerKind.Ball, label, 1, pop);
         }
     }
 
-    float hintBottom;   // where the hint card ended last frame (virtual pixels)
-
-    bool HintVisible =>puzzle != null && showHint && Time.realtimeSinceStartup < hintUntil && puzzle.Level != null && (ball == null || locked);
-
-    /// <summary>Big centre messages sit below the hint card while it's up.</summary>
-    float MessageY(float h) => HintVisible ? Mathf.Max(h * 0.24f, hintBottom + 20) : h * 0.24f;
+    bool HintVisible => puzzle != null && showHint && Time.realtimeSinceStartup < hintUntil && puzzle.Level != null && (ball == null || locked);
 
     /// <summary>Crosshair, pieces in hand, puzzle status and the level's hint.</summary>
-    void DrawPuzzleHud(float w, float h)
+    void PuzzleHud()
     {
         bool onFoot = exploring && Cursor.lockState == CursorLockMode.Locked;
-        if (onFoot && (ball == null || state != State.Finished))
-        {
-            Color c = puzzle.HasTarget ? S3Hud.Accent : new Color(1, 1, 1, 0.85f);
-            S3Hud.Icon(new Rect(w / 2 - 10, h / 2 - 10, 20, 20), S3Hud.Ring, c);
-            S3Hud.Icon(new Rect(w / 2 - 2.5f, h / 2 - 2.5f, 5, 5), S3Hud.Circle, c, false);
-        }
+        hud.SetCrosshair(onFoot && (ball == null || state != State.Finished), puzzle.HasTarget);
         bool relevant = ball == null || locked || exploring;
-        if (relevant && puzzle.Level != null && (puzzle.Level.mirrors > 0 || puzzle.Level.diffractors > 0) && (ball == null || exploring))
-        {
-            DrawInventory(w / 2, h - 106);
-            S3Hud.Note(w / 2, h - 160, puzzle.StatusText, null, S3Hud.Small);
-        }
-        if (HintVisible) DrawLevelHint(w);
-    }
-
-    /// <summary>The pieces you have, as chips; the one in hand is highlighted.</summary>
-    void DrawInventory(float cx, float cy)
-    {
-        var items = new List<(string key, string name, int count, bool held)>();
-        if (puzzle.Level.mirrors > 0) items.Add(("1", "Mirror", puzzle.mirrorsLeft, puzzle.tool == S3Laser.Kind.Mirror));
-        if (puzzle.Level.diffractors > 0) items.Add(("2", "Diffractor", puzzle.diffractorsLeft, puzzle.tool == S3Laser.Kind.Diffractor));
-        const float gap = 10, pad = 14, height = 44;
-        float Width((string key, string name, int count, bool held) it) =>
-            pad + 24 + 10 + S3Hud.Measure(it.name, S3Hud.Body).x + 10 + S3Hud.Measure($"×{it.count}", S3Hud.BodyBold).x + pad;
-        float total = -gap;
-        foreach (var it in items) total += Width(it) + gap;
-        float x = cx - total / 2;
-        foreach (var it in items)
-        {
-            float cw = Width(it);
-            var r = new Rect(x, cy - height / 2, cw, height);
-            if (it.held) S3Hud.Panel(r, new Color(S3Hud.Accent.r, S3Hud.Accent.g, S3Hud.Accent.b, 0.92f));
-            else S3Hud.Panel(r);
-            Color ink = it.held ? new Color(0.12f, 0.09f, 0.03f) : it.count > 0 ? S3Hud.Ink : S3Hud.Dim;
-            float tx = x + pad + S3Hud.Key(x + pad, cy, it.key) + 10;
-            float nw = S3Hud.Measure(it.name, S3Hud.Body).x;
-            S3Hud.Text(new Rect(tx, cy - 12, nw + 2, 24), it.name, S3Hud.Body, ink, false);
-            S3Hud.Text(new Rect(tx + nw + 10, cy - 12, 60, 24), $"×{it.count}", S3Hud.BodyBold, ink, false);
-            x += cw + gap;
-        }
-    }
-
-    /// <summary>The level's hint, on a card at the top.</summary>
-    void DrawLevelHint(float w)
-    {
-        float bw = Mathf.Min(760, w - 48), x = (w - bw) / 2, y = 24, pad = 22;
-        float th = S3Hud.Wrap.CalcHeight(new GUIContent(puzzle.Level.hint), bw - 2 * pad);
-        var r = new Rect(x, y, bw, th + 82);
-        hintBottom = r.yMax;
-        S3Hud.Panel(r);
-        S3Hud.Text(new Rect(x + pad, y + 16, bw, 16), "PUZZLE", S3Hud.Eyebrow, S3Hud.Accent, false);
-        float kw = S3Hud.Measure("hide", S3Hud.Small).x;
-        S3Hud.Text(new Rect(x + bw - pad - kw, y + 14, kw + 2, 20), "hide", S3Hud.Small, S3Hud.Dim, false);
-        S3Hud.Key(x + bw - pad - kw - 32, y + 24, "H");
-        S3Hud.Text(new Rect(x + pad, y + 36, bw, 26), puzzle.Level.title, S3Hud.BodyBold, S3Hud.Ink, false);
-        S3Hud.Text(new Rect(x + pad, y + 64, bw - 2 * pad, th), puzzle.Level.hint, S3Hud.Wrap, new Color(1, 1, 1, 0.85f), false);
-    }
-
-    static readonly (string group, string keys)[] ControlLines =
-    {
-        ("Golf", "A/D or mouse aim  ·  W/S height (Shift fine)  ·  Space power, Space shoot  ·  Right-click cancel  ·  C level the view"),
-        ("Ball", "Tab walk around  ·  E / F back to the ball  ·  B replay last spot (+1)  ·  R restart  ·  N start over"),
-        ("Laser", "Click place / pick up  ·  Q/E turn  ·  1 / 2 or wheel switch piece  ·  H puzzle hint"),
-        ("Walking", "WASD, Shift run, Space jump  ·  M next map  ·  Esc free the mouse"),
-        ("Antipodes", "Straight up at full power, a ball comes down 37.7 m away"),
-    };
-
-    /// <summary>Every hole and puzzle, one column per map (the one you're on highlighted), and the controls.</summary>
-    void DrawLevelSelect(float w, float h)
-    {
-        GUI.color = new Color(0.02f, 0.03f, 0.06f, 0.6f);
-        GUI.DrawTexture(new Rect(0, 0, w, h), Texture2D.whiteTexture);
-        GUI.color = Color.white;
-        float gap = 20, colW = Mathf.Min(360, (w - 112 - 2 * gap) / 3), rowH = 42, rowStep = rowH + 8, lineH = 28;
-        int rows = 0;
-        foreach (var l in levelLabels) rows = Mathf.Max(rows, l.Length);
-        float cardW = 3 * colW + 2 * gap + 64;
-        float levelsH = 96 + 32 + rows * rowStep;
-        float cardH = levelsH + 30 + 32 + ControlLines.Length * lineH + 64;
-        float x0 = (w - cardW) / 2, y0 = Mathf.Max(16, (h - cardH) / 2);
-        S3Hud.Panel(new Rect(x0, y0, cardW, cardH), 1.45f);
-        S3Hud.Text(new Rect(x0, y0 + 24, cardW, 56), "Select a level", S3Hud.Title, S3Hud.Ink, false);
-        int current = world.HasGolf ? holeIndex : puzzleIndex;
-        for (int m = 0; m < Maps.Length; m++)
-        {
-            float x = x0 + 32 + m * (colW + gap), y = y0 + 96;
-            S3Hud.Text(new Rect(x + 2, y, colW, 18), MapTitle(Maps[m]).ToUpperInvariant(), S3Hud.Eyebrow, S3Hud.Accent, false);
-            y += 32;
-            for (int i = 0; i < levelLabels[m].Length; i++, y += rowStep)
-                if (S3Hud.Button(new Rect(x, y, colW, rowH), levelLabels[m][i], Maps[m] == world.biome && i == current))
-                {
-                    JumpTo(Maps[m], i);
-                    return;
-                }
-        }
-        float cy = y0 + levelsH + 30;
-        S3Hud.Text(new Rect(x0 + 34, cy, cardW, 18), "CONTROLS", S3Hud.Eyebrow, S3Hud.Accent, false);
-        cy += 32;
-        foreach (var (group, keys) in ControlLines)
-        {
-            S3Hud.Text(new Rect(x0 + 34, cy, 120, lineH), group, S3Hud.BodyBold, S3Hud.Ink, false);
-            S3Hud.Text(new Rect(x0 + 154, cy, cardW - 180, lineH), keys, S3Hud.Small, S3Hud.Dim, false);
-            cy += lineH;
-        }
-        S3Hud.Centered(w / 2, y0 + cardH - 30, "Click a level to play it   ·   L or Esc to close", S3Hud.Small, S3Hud.Dim);
-    }
-
-    void DrawMarker(Vector4 target, Color color, string label, Texture2D icon, float scale = 1)
-    {
-        if (!cam) cam = player.GetComponent<Camera>();
-        Matrix4x4 frame = player.ViewFrame();
-        Vector4 q = Matrix4x4.Scale(new Vector3(1, 1, -1)) * frame.transpose * target;
-        var dir = new Vector3(q.x, q.y, -q.z);          // Unity camera space: +z forward
-        // markers stay below the cards along the top (the hint card's bottom is last frame's)
-        float k = S3Hud.Scale, w = S3Hud.Width, h = S3Hud.Height, m = 40, top = Mathf.Max(locked ? 196 : 152, HintVisible ? hintBottom + 14 : 0);
-        Vector2 c = new Vector2(w / 2, h / 2), p;
-        bool onScreen = false;
-        if (dir.z > 1e-4f)
-        {
-            Vector3 sp = cam.WorldToScreenPoint(cam.transform.TransformPoint(dir.normalized * 10f));
-            p = new Vector2(sp.x / k, (Screen.height - sp.y) / k);
-            onScreen = p.x > m && p.x < w - m && p.y > m && p.y < h - m;
-        }
-        else p = c + new Vector2(dir.x, -dir.y).normalized * 1e4f;   // behind: push towards its side
-        if (!onScreen)
-        {
-            Vector2 v = p - c;
-            if (v.sqrMagnitude < 1e-6f) v = Vector2.up;
-            float s = Mathf.Min((w / 2 - m) / Mathf.Max(Mathf.Abs(v.x), 1e-4f), (h / 2 - m) / Mathf.Max(Mathf.Abs(v.y), 1e-4f));
-            p = c + v * s;
-            p.y = Mathf.Min(p.y, h - 120);
-        }
-        p.y = Mathf.Max(p.y, top);
-        float size = 24 * scale;
-        S3Hud.Icon(new Rect(p.x - size / 2, p.y - size / 2, size, size), icon, color);
-        S3Hud.Tag(p.x, p.y + size / 2 + 6, label, new Color(1, 1, 1, color.a));
+        var level = puzzle.Level;
+        bool pieces = relevant && level != null && (level.mirrors > 0 || level.diffractors > 0) && (ball == null || exploring);
+        hud.SetInventory(pieces, level?.mirrors ?? 0, puzzle.mirrorsLeft, level?.diffractors ?? 0, puzzle.diffractorsLeft, puzzle.tool == S3Laser.Kind.Mirror);
+        hud.SetStatus(pieces ? puzzle.StatusText : null);
+        hud.SetHintCard(HintVisible, level?.title, level?.hint);
     }
 }

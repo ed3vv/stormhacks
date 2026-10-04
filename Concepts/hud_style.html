@@ -1,0 +1,173 @@
+<!doctype html>
+<html>
+<head>
+<meta charset="utf-8">
+<meta name="viewport" content="width=device-width, initial-scale=1">
+<title>S3Golf HUD Style</title>
+<link href="https://fonts.googleapis.com/css2?family=Lilita+One&family=Rubik:wght@500;700;800&display=swap" rel="stylesheet">
+<style>
+:root{
+  --ink:#1b2033; --ink-hi:#2a3150; --ink-lo:#0e1220;
+  --paper:#fff3d6; --paper-lo:#e6cf9c;
+  --flag:#e5383b; --flag-hi:#ff5a5c; --flag-lo:#a81f24;
+  --gold:#ffc23d; --gold-lo:#c98a12;
+  --grass:#7cc243; --ice:#8fd6ff; --gem:#c49bff;
+}
+*{box-sizing:border-box;margin:0}
+body{background:#111;font-family:Rubik,sans-serif;color:var(--paper);display:flex;flex-direction:column;align-items:center;gap:24px;padding:24px 16px}
+h1{font:400 22px 'Lilita One';color:#ddd;letter-spacing:.5px}
+.stage{position:relative;width:1600px;height:900px;transform-origin:top left;overflow:hidden;border-radius:6px}
+.wrap{width:min(1600px,100%);}
+.stage img.bg{position:absolute;inset:0;width:100%;height:100%;object-fit:cover;filter:saturate(1.05)}
+.cover{position:absolute;background:#2f6b1d;opacity:0}
+.display{font-family:'Lilita One',sans-serif;font-weight:400;letter-spacing:.5px}
+
+.block{position:absolute;filter:drop-shadow(0 6px 0 var(--ink-lo)) drop-shadow(0 10px 14px rgba(0,0,0,.35))}
+.facet{clip-path:polygon(14px 0,calc(100% - 14px) 0,100% 14px,100% calc(100% - 14px),calc(100% - 14px) 100%,14px 100%,0 calc(100% - 14px),0 14px);
+  background:linear-gradient(155deg,var(--ink-hi) 0 38%,var(--ink) 38% 100%)}
+
+.pennant{left:36px;top:32px;display:flex;align-items:stretch}
+.pennant .pole{width:10px;background:var(--paper);border-radius:3px 3px 0 0;margin-right:-2px;position:relative;z-index:2;box-shadow:inset -3px 0 0 var(--paper-lo)}
+.pennant .flag{background:linear-gradient(160deg,var(--flag-hi) 0 42%,var(--flag) 42% 100%);
+  clip-path:polygon(0 0,100% 0,88% 50%,100% 100%,0 100%);padding:14px 70px 14px 22px;color:var(--paper)}
+.pennant .map{font:800 13px Rubik;letter-spacing:2.5px;opacity:.85}
+.pennant .hole{font-size:54px;line-height:1;margin-top:2px}
+.pennant .hole small{font-size:26px;opacity:.75}
+.pips{display:flex;gap:7px;margin-top:8px}
+.pip{width:14px;height:14px;transform:rotate(45deg);background:rgba(255,243,214,.3)}
+.pip.done{background:var(--paper)}
+.pip.now{background:var(--gold);outline:3px solid var(--paper)}
+.chips{position:absolute;left:46px;top:186px;display:flex;gap:10px}
+.chip{padding:8px 16px 9px;font:700 17px Rubik;color:var(--paper)}
+.chip b{font-family:'Lilita One';font-weight:400;font-size:22px;margin-left:6px;color:var(--gold)}
+
+.stats{right:36px;top:36px;display:flex;gap:12px}
+.stat{padding:14px 22px 16px;min-width:150px}
+.stat .lbl{font:800 13px Rubik;letter-spacing:2.5px;color:var(--gold)}
+.stat .val{font-size:52px;line-height:1;margin-top:4px}
+.stat .val small{font-size:24px;opacity:.7;margin-left:3px}
+.arc{position:absolute;right:16px;top:16px}
+
+.power{left:50%;bottom:118px;transform:translateX(-50%);width:560px}
+.power .row{display:flex;justify-content:space-between;align-items:flex-end;margin-bottom:8px;text-shadow:0 2px 0 var(--ink-lo)}
+.power .lbl{font:800 14px Rubik;letter-spacing:3px}
+.power .pct{font-size:40px;line-height:.9}
+.segs{display:flex;gap:4px;padding:8px 10px;position:relative}
+.seg{flex:1;height:26px;transform:skewX(-18deg);background:rgba(255,243,214,.14)}
+.pole-mark{position:absolute;top:-10px;bottom:-26px;width:4px;background:var(--ice);left:78%;border-radius:2px}
+.pole-mark span{position:absolute;top:calc(100% + 2px);left:50%;transform:translateX(-50%);white-space:nowrap;font:800 12px Rubik;letter-spacing:2px;color:var(--ice);text-shadow:0 2px 0 var(--ink-lo)}
+.ghost{position:absolute;top:2px;bottom:2px;width:3px;left:52%;background:rgba(255,243,214,.6)}
+
+.hints{left:50%;bottom:36px;transform:translateX(-50%);display:flex;gap:28px;padding:12px 24px;align-items:center}
+.hint{display:flex;align-items:center;gap:10px;font:700 18px Rubik}
+.key{display:inline-flex;align-items:center;justify-content:center;min-width:34px;height:32px;padding:0 9px;background:var(--paper);color:var(--ink);
+  font:800 14px Rubik;border-radius:6px;box-shadow:0 4px 0 var(--paper-lo),0 5px 0 var(--ink-lo);transform:translateY(-2px)}
+
+.ribbon{left:50%;top:230px;transform:translateX(-50%)}
+.ribbon .band{background:linear-gradient(170deg,var(--gold) 0 50%,#f4ac1f 50% 100%);color:var(--ink);padding:14px 70px 16px;
+  clip-path:polygon(0 0,100% 0,96% 50%,100% 100%,0 100%,4% 50%);text-align:center}
+.ribbon .t{font-size:58px;line-height:1}
+.ribbon .s{font:800 16px Rubik;letter-spacing:3px;margin-top:4px}
+
+.marker{position:absolute;display:flex;flex-direction:column;align-items:center;gap:6px;transform:translateX(-50%)}
+.marker .tag{padding:4px 12px 5px;font:800 15px Rubik;color:var(--paper);background:var(--ink);clip-path:polygon(8px 0,100% 0,calc(100% - 8px) 100%,0 100%)}
+.cupicon{width:30px;height:34px;background:var(--flag);clip-path:polygon(0 0,100% 30%,0 60%);border-left:4px solid var(--paper)}
+.gemicon{width:30px;height:34px;background:linear-gradient(90deg,#e0c8ff 50%,var(--gem) 50%);clip-path:polygon(50% 0,100% 40%,50% 100%,0 40%)}
+.poleicon{width:30px;height:30px;border:5px solid var(--ice);border-radius:50%;box-shadow:0 0 0 3px var(--ink)}
+
+.inv{position:absolute;display:flex;gap:12px}
+.slot{width:86px;height:86px;display:flex;flex-direction:column;align-items:center;justify-content:center;position:relative}
+.slot.held{background:linear-gradient(155deg,#ffd76a 0 38%,var(--gold) 38%);color:var(--ink)}
+.slot.empty{opacity:.45}
+.slot .n{position:absolute;right:8px;bottom:4px;font-family:'Lilita One';font-size:24px}
+.slot .k{position:absolute;left:8px;top:8px}
+.slot .key{min-width:24px;height:22px;font-size:12px;padding:0 6px}
+.mirror{width:34px;height:40px;background:linear-gradient(120deg,#e9fbff 0 45%,#9ad9ef 45%);clip-path:polygon(20% 0,100% 0,80% 100%,0 100%);margin-top:6px}
+.diff{width:38px;height:38px;background:linear-gradient(90deg,#f3e6ff 50%,var(--gem) 50%);clip-path:polygon(50% 0,100% 50%,50% 100%,0 50%);margin-top:6px}
+
+.cross{position:absolute;left:50%;top:50%;width:34px;height:34px;transform:translate(-50%,-50%) rotate(45deg);border:3px solid var(--paper);box-shadow:0 0 0 2px var(--ink-lo)}
+.cross::after{content:"";position:absolute;inset:11px;background:var(--gold)}
+.foot{position:absolute;left:36px;bottom:36px;display:flex;align-items:center;gap:10px;font:700 15px Rubik;text-shadow:0 2px 0 var(--ink-lo)}
+</style>
+</head>
+<body>
+<h1>Faceted golf — style concept (golf, aiming + power)</h1>
+<div class="wrap"><div class="stage" id="s1">
+  <img class="bg" src="../Captures/07_aim60.png">
+  
+
+  <div class="block pennant">
+    <div class="pole"></div>
+    <div class="flag">
+      <div class="map">MEADOW</div>
+      <div class="hole display">Hole 1 <small>/ 5</small></div>
+      <div class="pips"><div class="pip now"></div><div class="pip"></div><div class="pip"></div><div class="pip"></div><div class="pip"></div></div>
+    </div>
+  </div>
+  <div class="chips block" style="filter:drop-shadow(0 4px 0 var(--ink-lo))">
+    <div class="chip facet">Par<b>4</b></div>
+    <div class="chip facet">Stroke<b>0</b></div>
+    <div class="chip facet">Total<b>0</b></div>
+  </div>
+
+  <div class="block stats">
+    <div class="stat facet"><div class="lbl">PIN</div><div class="val display">33<small>m</small></div></div>
+    <div class="stat facet" style="position:relative;padding-right:70px"><div class="lbl">LAUNCH</div><div class="val display">82<small>°</small></div>
+      <svg class="arc" width="48" height="48" viewBox="0 0 48 48"><path d="M6 42 A36 36 0 0 1 42 6" fill="none" stroke="rgba(255,243,214,.25)" stroke-width="5"/><line x1="6" y1="42" x2="11" y2="7" stroke="#ffc23d" stroke-width="5" stroke-linecap="round"/></svg></div>
+  </div>
+
+  <div class="marker" style="left:800px;top:186px"><div class="poleicon"></div><div class="tag">OVER THE POLE · 37 m to pin</div></div>
+
+  <div class="block power">
+    <div class="row"><span class="lbl">POWER</span><span class="pct display">65%</span></div>
+    <div class="segs facet" id="segs"><div class="ghost"></div><div class="pole-mark"><span>OVER THE POLE</span></div></div>
+  </div>
+
+  <div class="block hints facet">
+    <div class="hint"><span class="key">Space</span>Shoot</div>
+    <div class="hint"><span class="key">RMB</span>Cancel</div>
+  </div>
+  <div class="foot"><span class="key">L</span>Levels</div>
+</div></div>
+
+<h1>Same kit — centre banner, crystal marker, puzzle inventory</h1>
+<div class="wrap"><div class="stage" id="s2">
+  <img class="bg" src="../Captures/41_desert_p1_solved.png">
+  
+  
+
+  <div class="block pennant">
+    <div class="pole"></div>
+    <div class="flag" style="background:linear-gradient(160deg,#f08a4b 0 42%,#d0612a 42% 100%)">
+      <div class="map">DESERT OASIS</div>
+      <div class="hole display">Puzzle 5 <small>/ 5</small></div>
+      <div class="pips"><div class="pip done"></div><div class="pip done"></div><div class="pip done"></div><div class="pip done"></div><div class="pip now"></div></div>
+    </div>
+  </div>
+
+  <div class="block ribbon"><div class="band"><div class="t display">Crystal lit!</div><div class="s">FULL CIRCLE · SOLVED</div></div></div>
+
+  <div class="marker" style="left:1253px;top:236px"><div class="gemicon"></div><div class="tag">5 m</div></div>
+  <div class="cross"></div>
+
+  <div class="inv block" style="left:50%;transform:translateX(-50%);bottom:110px">
+    <div class="slot facet held"><span class="k"><span class="key">1</span></span><div class="mirror"></div><span class="n">1</span></div>
+    <div class="slot facet"><span class="k"><span class="key">2</span></span><div class="diff"></div><span class="n">1</span></div>
+    <div class="slot facet empty"><span class="k"><span class="key">3</span></span><div class="mirror" style="filter:grayscale(1)"></div><span class="n">0</span></div>
+  </div>
+  <div class="block hints facet">
+    <div class="hint"><span class="key">LMB</span>Place</div>
+    <div class="hint"><span class="key">Q</span><span class="key">E</span>Turn</div>
+    <div class="hint"><span class="key">H</span>Hint</div>
+  </div>
+  <div class="foot"><span class="key">L</span>Levels</div>
+</div></div>
+<script>
+const segs=document.getElementById('segs');
+for(let i=0;i<20;i++){const d=document.createElement('div');d.className='seg';const t=i/19;
+ if(i<13){d.style.background=t<.5?`hsl(${100-t*110},70%,52%)`:`hsl(${100-t*110},85%,55%)`}segs.appendChild(d)}
+function fit(){document.querySelectorAll('.stage').forEach(s=>{const w=s.parentElement.clientWidth/1600;s.style.transform=`scale(${w})`;s.parentElement.style.height=900*w+'px'})}
+addEventListener('resize',fit);fit();
+</script>
+</body>
+</html>

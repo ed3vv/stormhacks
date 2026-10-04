@@ -1,0 +1,5 @@
+:root {
+    -unity-font-definition: url("project://database/Assets/S3/UI/Fonts/Rubik-Bold-SDF.asset");
+    color: #FFF3D6;
+    font-size: 18px;
+}

@@ -93,7 +93,7 @@ public static class S3Setup
     /// Graphics and performance settings for the open S3 scene:
     ///   * a global post-processing volume with one profile per map (bloom, neutral tonemapping,
     ///     grading, vignette; all effects that don't read depth, which isn't Euclidean here),
-    ///   * SMAA on the camera instead of MSAA,
+    ///   * 4x MSAA (PC) plus SMAA on the camera,
     ///   * no camera depth / opaque texture copies (nothing reads them; they cost two passes a frame).
     /// </summary>
     [MenuItem("S3/Setup Graphics")]
@@ -106,7 +106,8 @@ public static class S3Setup
             if (rp == null) continue;
             rp.supportsCameraDepthTexture = false;
             rp.supportsCameraOpaqueTexture = false;
-            rp.msaaSampleCount = 1;
+            // 4x MSAA on PC for the low-poly silhouettes and grass (SMAA on the camera only catches some of it)
+            rp.msaaSampleCount = rp.name.Contains("Mobile") ? 1 : 4;
             rp.supportsHDR = true;
             EditorUtility.SetDirty(rp);
         }
@@ -191,16 +192,17 @@ public static class S3Setup
         }
         var bloom = Get<Bloom>();
         bloom.threshold.Override(0.9f);
-        bloom.intensity.Override(desert ? 0.6f : 0.35f);
+        bloom.intensity.Override(desert ? 0.6f : 0.45f);
+        bloom.highQualityFiltering.Override(!desert);
         bloom.scatter.Override(0.7f);
         bloom.tint.Override(desert ? new Color(1f, 0.82f, 0.66f) : Color.white);
         Get<Tonemapping>().mode.Override(TonemappingMode.Neutral);
         var grade = Get<ColorAdjustments>();
-        grade.postExposure.Override(desert ? 0.25f : 0.2f);
-        grade.contrast.Override(desert ? 14f : 12f);
-        grade.saturation.Override(desert ? 10f : 14f);
+        grade.postExposure.Override(0.25f);
+        grade.contrast.Override(desert ? 14f : 16f);
+        grade.saturation.Override(desert ? 10f : 2f);   // the meadow's greens are toned down
         var wb = Get<WhiteBalance>();
-        wb.temperature.Override(desert ? 12f : 0f);
+        wb.temperature.Override(desert ? 12f : 6f);
         wb.tint.Override(desert ? 4f : 0f);
         var vignette = Get<Vignette>();
         vignette.intensity.Override(desert ? 0.3f : 0.22f);
@@ -211,6 +213,7 @@ public static class S3Setup
             // polar day: cool, bright snow, bloom for the ice and the lasers
             bloom.threshold.Override(0.85f);
             bloom.intensity.Override(0.7f);
+            bloom.highQualityFiltering.Override(false);
             bloom.tint.Override(new Color(0.85f, 0.95f, 1f));
             grade.postExposure.Override(0.05f);
             grade.contrast.Override(10f);

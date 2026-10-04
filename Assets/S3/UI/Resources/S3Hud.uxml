@@ -1,0 +1,118 @@
+<ui:UXML xmlns:ui="UnityEngine.UIElements">
+    <ui:Style src="project://database/Assets/S3/UI/Hud.uss" />
+    <ui:VisualElement name="root" class="screen" picking-mode="Ignore">
+        <ui:VisualElement name="hud" class="screen" picking-mode="Ignore">
+            <ui:VisualElement name="markers" class="screen" picking-mode="Ignore" />
+            <ShapeIcon name="crosshair" shape="Crosshair" class="crosshair" picking-mode="Ignore" />
+
+            <ui:VisualElement name="scorecard" class="scorecard" picking-mode="Ignore">
+                <Pennant name="pennant" class="pennant" picking-mode="Ignore">
+                    <ui:Label name="mapName" class="eyebrow pennant-map" />
+                    <ui:VisualElement class="row pennant-title-row">
+                        <ui:Label name="holeTitle" class="display pennant-title" />
+                        <ui:Label name="holeOf" class="display pennant-of" />
+                    </ui:VisualElement>
+                    <ui:VisualElement name="pips" class="pips" />
+                </Pennant>
+                <ui:VisualElement name="chips" class="chips" />
+                <FacetPanel name="sealed" class="chip chip-sealed">
+                    <ShapeIcon shape="Gem" class="chip-icon" />
+                    <ui:Label name="sealedText" class="chip-label" />
+                </FacetPanel>
+            </ui:VisualElement>
+
+            <ui:VisualElement name="stats" class="stats" picking-mode="Ignore">
+                <FacetPanel name="statPin" class="stat">
+                    <ui:Label text="PIN" class="eyebrow" />
+                    <ui:VisualElement class="row stat-value-row">
+                        <ui:Label name="pinValue" class="display stat-value" />
+                        <ui:Label text="m" class="display stat-unit" />
+                    </ui:VisualElement>
+                </FacetPanel>
+                <FacetPanel name="statLaunch" class="stat stat-launch">
+                    <ui:VisualElement>
+                        <ui:Label text="LAUNCH" class="eyebrow" />
+                        <ui:VisualElement class="row stat-value-row">
+                            <ui:Label name="launchValue" class="display stat-value" />
+                            <ui:Label text="°" class="display stat-unit stat-unit--deg" />
+                        </ui:VisualElement>
+                    </ui:VisualElement>
+                    <AngleGauge name="launchGauge" class="stat-gauge" />
+                </FacetPanel>
+            </ui:VisualElement>
+
+            <FacetPanel name="hintCard" class="hint-card">
+                <ui:VisualElement class="row hint-head">
+                    <ui:Label text="PUZZLE" class="eyebrow" />
+                    <ui:VisualElement class="row">
+                        <ui:Label text="H" class="key key--small" />
+                        <ui:Label text="hide" class="hint-hide" />
+                    </ui:VisualElement>
+                </ui:VisualElement>
+                <ui:Label name="hintTitle" class="hint-title" />
+                <ui:Label name="hintBody" class="hint-body" />
+            </FacetPanel>
+
+            <ui:VisualElement name="bannerSlot" class="banner-slot" picking-mode="Ignore">
+                <Ribbon name="banner" class="banner" picking-mode="Ignore">
+                    <ui:Label name="bannerTitle" class="display banner-title" />
+                    <ui:Label name="bannerSub" class="banner-sub" />
+                </Ribbon>
+            </ui:VisualElement>
+
+            <ui:VisualElement name="bottom" class="bottom" picking-mode="Ignore">
+                <FacetPanel name="status" class="status">
+                    <ui:Label name="statusText" class="status-text" />
+                </FacetPanel>
+                <ui:VisualElement name="inventory" class="inventory" />
+                <ui:VisualElement name="power" class="power">
+                    <ui:VisualElement class="row power-head">
+                        <ui:Label text="POWER" class="eyebrow power-label" />
+                        <ui:Label name="powerPct" class="display power-pct" />
+                    </ui:VisualElement>
+                    <FacetPanel class="power-track">
+                        <SegmentBar name="powerBar" class="power-bar">
+                            <ui:Label name="poleLabel" text="OVER THE POLE" class="pole-label" />
+                        </SegmentBar>
+                    </FacetPanel>
+                </ui:VisualElement>
+                <FacetPanel name="hints" class="hints" />
+                <FacetPanel name="prompt" class="prompt">
+                    <ui:Label text="Click" class="key" />
+                    <ui:Label text="to play" class="prompt-text" />
+                </FacetPanel>
+            </ui:VisualElement>
+
+            <ui:VisualElement class="footer" picking-mode="Ignore">
+                <ui:Label text="L" class="key" />
+                <ui:Label text="Levels" class="footer-label" />
+                <ui:Label text="Esc" class="key" />
+                <ui:Label text="Menu" class="footer-label" />
+            </ui:VisualElement>
+        </ui:VisualElement>
+
+        <ui:VisualElement name="replay" class="screen hidden" picking-mode="Ignore">
+            <FacetPanel class="replay-card">
+                <ui:Label text="INSTANT REPLAY" class="eyebrow replay-eyebrow" />
+                <ui:Label name="replayLine" class="replay-line" />
+                <ui:VisualElement class="replay-track">
+                    <ui:VisualElement name="replayFill" class="replay-fill" />
+                </ui:VisualElement>
+            </FacetPanel>
+            <ui:VisualElement class="bottom" picking-mode="Ignore">
+                <FacetPanel class="hints">
+                    <ui:VisualElement class="hint-item">
+                        <ui:Label text="Mouse" class="key" />
+                        <ui:Label text="Look around" class="hint-action" />
+                    </ui:VisualElement>
+                    <ui:VisualElement class="hint-item">
+                        <ui:Label text="Click" class="key" />
+                        <ui:Label text="Back" class="hint-action" />
+                    </ui:VisualElement>
+                </FacetPanel>
+            </ui:VisualElement>
+        </ui:VisualElement>
+
+        <ui:VisualElement name="menuLayer" class="screen menu-layer" />
+    </ui:VisualElement>
+</ui:UXML>

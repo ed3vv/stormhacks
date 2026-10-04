@@ -1,5 +1,5 @@
 fileFormatVersion: 2
-guid: 797fb2251844430478614aed1cf5a966
+guid: dce4fdacbd74622489e21ecf5ae85408
 TrueTypeFontImporter:
   externalObjects: {}
   serializedVersion: 4
@@ -9,7 +9,7 @@ TrueTypeFontImporter:
   characterPadding: 1
   includeFontData: 1
   fontNames:
-  - Roboto
+  - Rubik Light
   fallbackFontReferences: []
   customCharacters: 
   fontRenderingMode: 0

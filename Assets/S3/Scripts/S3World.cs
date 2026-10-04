@@ -206,6 +206,9 @@ public class S3World : MonoBehaviour
     /// <summary>Every hole's fences and their renderers (see SetActiveHole).</summary>
     [NonSerialized] public readonly Dictionary<int, List<S3Laser.Block>> holeFences = new Dictionary<int, List<S3Laser.Block>>();
     [NonSerialized] public readonly Dictionary<int, Renderer> fenceRenderers = new Dictionary<int, Renderer>();
+    /// <summary>The baked scenery and ground of the current map (the instant replay draws them again, as glass).</summary>
+    public Mesh SceneryMesh { get; private set; }
+    public Mesh GroundMesh { get; private set; }
     /// <summary>Desert: the puzzles in order. Basin: the lock on each hole's cup.</summary>
     [NonSerialized] public readonly List<S3Levels.Level> levels = new List<S3Levels.Level>();
 
@@ -343,12 +346,14 @@ public class S3World : MonoBehaviour
         BuildLevels();
 
         var scenery = S3Scenery.Build(this, new System.Random(seed));   // registers obstacles, fades, shadows, patches
-        CreateRenderer("Scenery", scenery.ToMesh("S3 Scenery"), objectMaterial, Matrix4x4.identity);
+        SceneryMesh = scenery.ToMesh("S3 Scenery");
+        CreateRenderer("Scenery", SceneryMesh, objectMaterial, Matrix4x4.identity);
 
         var ground = new MeshBuilder();
         ground.GroundDisk(radius, 96, 192, Color.white);
         BakeGroundShadows(ground);
-        CreateRenderer("Ground", ground.ToMesh("S3 Ground"), groundMaterial, Matrix4x4.identity);
+        GroundMesh = ground.ToMesh("S3 Ground");
+        CreateRenderer("Ground", GroundMesh, groundMaterial, Matrix4x4.identity);
 
         if (postVolume)
         {

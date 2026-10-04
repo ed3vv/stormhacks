@@ -1,5 +1,5 @@
 fileFormatVersion: 2
-guid: ac8b99163e802554c8bc0eb3a02028a2
+guid: a4af9f02b96e19a438302b3dbccd45ac
 TrueTypeFontImporter:
   externalObjects: {}
   serializedVersion: 4
@@ -9,7 +9,7 @@ TrueTypeFontImporter:
   characterPadding: 1
   includeFontData: 1
   fontNames:
-  - Roboto
+  - Lilita One
   fallbackFontReferences: []
   customCharacters: 
   fontRenderingMode: 0
