@@ -34,16 +34,31 @@ Shader "S3/Object"
         float4x4 _S3Model;   // per renderer: object frame in SO(4)
         float4x4 _S3View;    // global: R^4 -> eye frame (x right, y up, -z forward, w)
         float4 _S3Eye;       // global: eye position on S^3
-        float4 _S3Sun;       // global: fixed R^4 vector; its tangent part is the light direction
-        float4 _S3Haze;      // rgb haze colour, a = strength towards the antipode
         float4 _S3Hole;      // cup position on S^3
-        float _S3R, _S3InvR, _S3Near, _S3Ambient, _S3CupR, _S3GreenR;
+        float _S3R, _S3InvR, _S3Near, _S3CupR, _S3GreenR;
+
+        // per-map look (see S3World.Style)
+        float4 _S3Sun;            // fixed R^4 vector; its tangent part is the light direction
+        float4 _S3SunColor, _S3SkyAmbient, _S3GroundAmbient;
+        float4 _S3Haze;           // rgb haze colour, a = strength towards the antipode
+        float _S3Biome;           // 0 meadow, 1 desert
+        float4 _S3Patch[16];      // desert grass patches: centre on S^3
+        float _S3PatchR[16];      // ... and radius in metres
+        float _S3PatchCount;
+
+        // see-through props: one eased value per prop, computed on the CPU by S3World.UpdateFades
+        float _S3PropFade[512];
+        float _S3Fade;            // master switch
+
+        static const float4 Wind = float4(0.62, 0, 0.36, 0.7);
 
         struct Attributes
         {
-            float3 pos    : POSITION;
-            float3 normal : NORMAL;
-            float4 color  : COLOR;
+            float3 pos      : POSITION;
+            float3 normal   : NORMAL;
+            float4 color    : COLOR;
+            float4 prop     : TEXCOORD1;   // prop foot on S^3 (wind phase)
+            float4 propInfo : TEXCOORD2;   // (fade index, 1-based or 0, sway, 0, 0)
         };
 
         struct Varyings
@@ -53,7 +68,23 @@ Shader "S3/Object"
             float4 p4    : TEXCOORD0;   // point of S^3 (world)
             float4 n4    : TEXCOORD1;   // tangent normal (world)
             float4 q     : TEXCOORD2;   // point in the eye frame
+            float fade   : TEXCOORD3;   // 0 solid .. 1 see-through
         };
+
+        float S3Dist(float4 a, float4 b) { return 2 * asin(saturate(length(a - b) * 0.5)); }
+
+        // ordered 4x4 dither threshold in (0, 1)
+        static const float BayerMatrix[16] = { 0, 8, 2, 10, 12, 4, 14, 6, 3, 11, 1, 9, 15, 7, 13, 5 };
+        float Bayer4(float2 pixel)
+        {
+            uint2 p = uint2(pixel) & 3;
+            return (BayerMatrix[p.y * 4 + p.x] + 0.5) / 16.0;
+        }
+
+        void SeeThrough(Varyings i)
+        {
+            if (i.fade > 0.01 && Bayer4(i.clip.xy) < i.fade * 0.78) discard;   // keep ~1/5 of the pixels
+        }
 
         Varyings S3Vert(Attributes a)
         {
@@ -66,9 +97,24 @@ Shader "S3/Object"
             float4 nl = float4(a.normal - along * d, 0) + along * float4(d * c, -s);
 
             Varyings o;
-            o.p4 = mul(_S3Model, pl);
+            float4 p = mul(_S3Model, pl);
             o.n4 = mul(_S3Model, nl);
-            float4 q = mul(_S3View, o.p4);
+
+            // wind: push grass and foliage sideways, more the higher above the ground
+            float sway = a.propInfo.y;
+            if (sway > 0)
+            {
+                float h = max(asin(clamp(p.y, -1, 1)) * _S3R, 0);
+                float phase = dot(a.prop, float4(12.9, 7.1, 5.3, 3.7)) * 6.2831;
+                float wave = sin(_Time.y * 1.7 + phase) * 0.7 + sin(_Time.y * 2.9 + phase * 1.3) * 0.3;
+                float amount = sway * wave * min(0.12 * h + 0.05 * h * h, 0.35);   // metres
+                float4 up = normalize(float4(0, 1, 0, 0) - p.y * p);
+                float4 w = Wind - dot(Wind, p) * p;
+                w = normalize(w - dot(w, up) * up + 1e-6);
+                p = normalize(p + w * (amount * _S3InvR));
+            }
+            o.p4 = p;
+            float4 q = mul(_S3View, p);
             o.q = q;
 
             // xy and w from the camera's own projection applied to the direction (x, y, z)
@@ -81,6 +127,8 @@ Shader "S3/Object"
             #endif
             o.clip = clip;
             o.color = a.color;
+            int idx = (int)(a.propInfo.x + 0.5);
+            o.fade = idx > 0 ? _S3PropFade[min(idx - 1, 511)] * _S3Fade : 0;
             return o;
         }
 
@@ -101,54 +149,87 @@ Shader "S3/Object"
                              lerp(Hash(i + float3(0, 1, 1)), Hash(i + float3(1, 1, 1)), f.x), f.y), f.z);
         }
 
-        float S3Dist(float4 a, float4 b) { return 2 * asin(saturate(length(a - b) * 0.5)); }
+        float3 MeadowGround(float3 g, float n1, float n2, float n3)
+        {
+            float3 grass = lerp(float3(0.36, 0.62, 0.24), float3(0.50, 0.74, 0.30), n1);
+            return grass * (0.86 + 0.18 * n2 + 0.08 * n3);
+        }
+
+        float3 DesertGround(float4 p, float3 g, float n1, float n2, float n3)
+        {
+            // wind-rippled sand
+            float rip = sin(g.x * 2.3 + g.y * 1.1 + g.z * 0.7 + n2 * 5) * 0.5 + 0.5;
+            float3 sand = lerp(float3(0.88, 0.69, 0.51), float3(0.96, 0.81, 0.63), n1);
+            sand *= (0.94 + 0.08 * rip) * (0.95 + 0.07 * n3);
+            // oases of lush grass around the registered patches, with a noisy edge
+            float patch = 0;
+            for (int k = 0; k < 16; k++)
+            {
+                if (k >= (int)_S3PatchCount) break;
+                float dm = S3Dist(p, _S3Patch[k]) * _S3R;
+                float edge = _S3PatchR[k] * (0.75 + 0.5 * n2);
+                patch = max(patch, 1 - smoothstep(edge - 1.0, edge, dm));
+            }
+            float3 grass = lerp(float3(0.50, 0.62, 0.20), float3(0.70, 0.75, 0.28), n2) * (0.85 + 0.2 * n3);
+            return lerp(sand, grass, patch);
+        }
 
         float3 GroundColor(float4 p)
         {
             // the ground is the unit 2-sphere in (x, z, w); scale to metres for the noise
             float3 g = float3(p.x, p.z, p.w) * _S3R;
             float n1 = Noise(g * 0.22), n2 = Noise(g * 1.1), n3 = Noise(g * 5.0);
-            float3 grass = lerp(float3(0.36, 0.62, 0.24), float3(0.50, 0.74, 0.30), n1);
-            grass *= 0.86 + 0.18 * n2 + 0.08 * n3;
+            float3 col = _S3Biome > 0.5 ? DesertGround(p, g, n1, n2, n3) : MeadowGround(g, n1, n2, n3);
 
             float dh = S3Dist(p, _S3Hole) * _S3R;   // metres from the cup
             float green = 1 - smoothstep(_S3GreenR - 0.25, _S3GreenR, dh);
             float3 putting = float3(0.47, 0.78, 0.34) * (0.96 + 0.06 * n3);
             float stripe = step(0.5, frac(g.x * 0.5));
             putting *= 0.97 + 0.05 * stripe;
-            grass = lerp(grass, putting, green);
-            float cup = 1 - smoothstep(_S3CupR - 0.012, _S3CupR + 0.012, dh);
-            float rim = (1 - smoothstep(_S3CupR + 0.012, _S3CupR + 0.04, dh)) * (1 - cup);
-            grass = lerp(grass, float3(0.92, 0.92, 0.88), rim * 0.6);
-            return lerp(grass, float3(0.04, 0.05, 0.03), cup);
+            col = lerp(col, putting, green);
+            float cup = 1 - smoothstep(_S3CupR - 0.015, _S3CupR + 0.015, dh);
+            float rim = (1 - smoothstep(_S3CupR + 0.015, _S3CupR + 0.06, dh)) * (1 - cup);
+            col = lerp(col, float3(0.94, 0.94, 0.90), rim * 0.65);
+            return lerp(col, float3(0.04, 0.05, 0.03), cup);
         }
 
         float4 S3Frag(Varyings i) : SV_Target
         {
+            SeeThrough(i);
             float4 p = normalize(i.p4);
             float4 n = normalize(i.n4 - dot(i.n4, p) * p);
             float4 toEye = _S3Eye - dot(_S3Eye, p) * p;
+            float eyeLen = length(toEye);
+            toEye = eyeLen > 1e-6 ? toEye / eyeLen : n;
             if (dot(n, toEye) < 0) n = -n;          // two-sided: always light the face we see
 
             float4 L = _S3Sun - dot(_S3Sun, p) * p;
             float lenL = length(L);
             L = lenL > 1e-5 ? L / lenL : n;
             float diff = saturate(dot(n, L));
+            float4 up = float4(0, 1, 0, 0) - p.y * p;
+            float upLen = length(up);
+            float hemi = upLen > 1e-5 ? dot(n, up / upLen) * 0.5 + 0.5 : 1;
 
             float3 base = i.color.rgb * _Color.rgb;
             if (_Ground > 0.5) base *= GroundColor(p);
-            float3 col = base * (_S3Ambient + (1 - _S3Ambient) * diff);
+            float3 ambient = lerp(_S3GroundAmbient.rgb, _S3SkyAmbient.rgb, hemi);
+            float3 col = base * (ambient + _S3SunColor.rgb * diff);
+            // soft rim of sunlight on silhouettes
+            float rim = pow(1 - saturate(dot(n, toEye)), 4);
+            col += base * _S3SunColor.rgb * rim * 0.35 * (0.4 + 0.6 * diff);
 
             float t = atan2(length(i.q.xyz), i.q.w);   // geodesic distance from the eye
-            col = lerp(col, _S3Haze.rgb, _S3Haze.a * smoothstep(0.45 * PI, PI, t));
+            col = lerp(col, _S3Haze.rgb, _S3Haze.a * smoothstep(0.4 * PI, PI, t));
             // colours above are authored in sRGB; the project renders in linear space
             #ifndef UNITY_COLORSPACE_GAMMA
+                col = max(col, 0);
                 col = col <= 0.04045 ? col / 12.92 : pow((col + 0.055) / 1.055, 2.4);
             #endif
             return float4(col, 1);
         }
 
-        float4 DepthFrag(Varyings i) : SV_Target { return 0; }
+        float4 DepthFrag(Varyings i) : SV_Target { SeeThrough(i); return 0; }
         ENDHLSL
 
         Pass

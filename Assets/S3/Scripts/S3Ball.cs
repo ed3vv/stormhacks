@@ -102,9 +102,12 @@ public class S3Ball
         }
 
         // trunks, rocks and houses as vertical cylinders
+        float reach = Mathf.Cos(Mathf.Min(12f / R, 3f));   // nothing is wider than ~12 m
         if (obstacles != null)
             foreach (var o in obstacles)
             {
+                // cheap reject first: far-away obstacles fail a single dot product
+                if (Vector4.Dot(pos, o.foot) < reach) continue;
                 float h = HeightM;
                 if (h - radius > o.height) continue;
                 Vector4 foot = Foot;
