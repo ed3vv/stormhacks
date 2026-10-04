@@ -317,6 +317,7 @@ public class S3Puzzle
         ghostValid = !ghost.FootprintContains(foot, PlayerRadiusM / R)
                      && !blocks.Exists(b => ghost.FootprintOverlaps(b, margin))
                      && !obstacles.Exists(b => ghost.FootprintOverlaps(b, margin))
+                     && !world.fences.Exists(b => ghost.FootprintOverlaps(b, margin))
                      && (forbidden == null || !forbidden(point));
     }
 
@@ -359,13 +360,28 @@ public class S3Puzzle
         get
         {
             if (flash != null && Time.realtimeSinceStartup < flashUntil && flash.Length > 0) return flash;
-            if (HologramSolves) return "✦ Put it down here and the crystal lights up";
-            var goal = Goal;
-            // your own distance to the crystal is on its waypoint
-            if (goal == null || Solved || ghost == null) return "";
-            string text = $"Piece to crystal {S3.Dist(ghost.position, goal.position) * R:0.0} m";
-            if (Level != null && Level.diffractors > 0) text += $"  ·  antipode {Mathf.PI * R:0.0} m";
-            return text;
+            if (ghost == null || Solved || previewScene == null) return "";
+            int goals = 0, litNow = 0, litThen = 0;
+            for (int i = 0; i < blocks.Count; i++)
+            {
+                if (blocks[i].kind != Kind.Goal) continue;
+                goals++;
+                if (light.litGoals.Contains(i)) litNow++;
+                if (preview.litGoals.Contains(i)) litThen++;
+            }
+            if (goals == 0) return "";
+            if (litThen == goals) return goals > 1 ? "✦ Put it down here and the crystals light up" : "✦ Put it down here and the crystal lights up";
+            // distances from the piece in your hands (your own distance to each crystal is on its waypoint):
+            // to the crystals still dark and to the pieces you have put down, against the antipode's 37.7 m
+            var parts = new List<string>();
+            if (litThen > litNow) parts.Add($"✧ lights {litThen} of {goals} crystals");
+            var dark = new List<string>();
+            foreach (var g in UnlitGoals) dark.Add($"{S3.Dist(ghost.position, g.position) * R:0.0}");
+            if (dark.Count > 0) parts.Add($"Piece to crystal {string.Join(" / ", dark)} m");
+            foreach (var b in blocks)
+                if (b.movable) parts.Add($"to your {Name(b.kind)} {S3.Dist(ghost.position, b.position) * R:0.0} m");
+            if (Level != null && (Level.diffractors > 0 || world.biome == S3World.Biome.Basin)) parts.Add($"antipode {Mathf.PI * R:0.0} m");
+            return string.Join("  ·  ", parts);
         }
     }
 

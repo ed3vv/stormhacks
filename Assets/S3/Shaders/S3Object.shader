@@ -185,7 +185,13 @@ Shader "S3/Object"
             snow *= 0.95 + 0.06 * n2;
             float sastrugi = sin(g.x * 1.7 - g.y * 2.3 + n2 * 4) * 0.5 + 0.5;
             snow *= 0.97 + 0.04 * sastrugi;
-            if (Hash(floor(g * 5)) > 0.993) snow = float3(1.05, 1.05, 1.1);
+            // finer wind streaks, grit and stones showing through in patches, and glints that twinkle
+            float streak = smoothstep(0.86, 1.0, sin(g.x * 7.3 + g.y * 3.1 - g.z * 2.2 + n3 * 2.5));
+            snow *= 1 + 0.035 * streak;
+            float grit = step(0.991, Hash(floor(g * 7) + 3.1)) * smoothstep(0.45, 0.7, n1);
+            snow = lerp(snow, float3(0.38, 0.41, 0.47), grit * 0.8);
+            float glint = Hash(floor(g * 5));
+            if (glint > 0.990) snow = lerp(snow, float3(1.12, 1.12, 1.18), 0.5 + 0.5 * sin(_Time.y * (1.5 + 3 * frac(glint * 97)) + glint * 60));
             // frozen lakes (the registered patches) with cracks and glints; purely cosmetic
             float lake = 0;
             for (int k = 0; k < 16; k++)
@@ -220,7 +226,8 @@ Shader "S3/Object"
             float cup = 1 - smoothstep(_S3CupR - 0.015, _S3CupR + 0.015, dh);
             float rim = (1 - smoothstep(_S3CupR + 0.015, _S3CupR + 0.06, dh)) * (1 - cup);
             col = lerp(col, float3(0.94, 0.94, 0.90), rim * 0.65);
-            return lerp(col, _S3Biome > 1.5 ? float3(0.10, 0.14, 0.20) : float3(0.04, 0.05, 0.03), cup);
+            col = lerp(col, _S3Biome > 1.5 ? float3(0.10, 0.14, 0.20) : float3(0.04, 0.05, 0.03), cup);
+            return col;
         }
 
         float4 S3Frag(Varyings i) : SV_Target

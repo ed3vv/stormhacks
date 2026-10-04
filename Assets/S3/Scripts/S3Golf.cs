@@ -1,4 +1,5 @@
 using System;
+using System.Collections.Generic;
 using UnityEngine;
 using UnityEngine.InputSystem;
 
@@ -81,6 +82,11 @@ public class S3Golf : MonoBehaviour
     State state;
     Renderer ballRenderer, flagRenderer, arrowRenderer, guideRenderer, restRenderer;
     Mesh restMesh;
+    // a beacon where a shot straight over the pole comes down
+    Renderer beaconRenderer;
+    MaterialPropertyBlock glowBlock;
+    bool steepShot;                       // the last shot was hit steeply enough to be going over the pole
+    readonly List<S3Laser.Block> solids = new List<S3Laser.Block>();   // what the ball bounces off: puzzle pieces and fences
     float stopTime = 1e6f;        // seconds since the ball last came to rest after a shot
     int holeIndex, strokes, total;
     bool powerSelecting, exploring;
@@ -139,12 +145,8 @@ public class S3Golf : MonoBehaviour
         locked = false;
         puzzle?.Dispose();
         puzzle = null;
-        player.blocked = null;
-        if (world.HasLasers)
-        {
-            puzzle = new S3Puzzle(world, player) { forbidden = Forbidden };
-            player.blocked = p => puzzle != null && puzzle.BlocksPlayer(p);
-        }
+        if (world.HasLasers) puzzle = new S3Puzzle(world, player) { forbidden = Forbidden };
+        player.blocked = p => (puzzle != null && puzzle.BlocksPlayer(p)) || world.FenceAt(p, player.bodyRadius);
         if (!world.HasGolf)
         {
             // the Desert: puzzles on foot, no ball
@@ -163,6 +165,8 @@ public class S3Golf : MonoBehaviour
         restMesh = S3Scenery.RingMesh(48, new Color(0.25f, 0.9f, 1f, 0.4f));
         restRenderer = world.CreateRenderer("Rest Ring", restMesh, world.objectMaterial, Matrix4x4.identity).GetComponent<Renderer>();
         stopTime = 1e6f;
+        if (world.glowMaterial)
+            beaconRenderer = world.CreateRenderer("Antipode Beacon", S3Scenery.BeaconMesh(), world.glowMaterial, Matrix4x4.identity).GetComponent<Renderer>();
         domeRenderer = puzzle != null && world.glowMaterial
             ? world.CreateRenderer("Ice Barrier", S3Scenery.DomeMesh(world.barrierRadius), world.glowMaterial, Matrix4x4.identity).GetComponent<Renderer>()
             : null;
@@ -200,8 +204,22 @@ public class S3Golf : MonoBehaviour
         locked = false;
         puzzle.OpenGate();
         S3Audio.Win();
-        Say("Crystal lit!\nThe cup is open.", 3.5f);
+        Say($"{(Crystals > 1 ? "Crystals" : "Crystal")} lit!\nThe cup is open.", 3.5f);
     }
+
+    /// <summary>How many crystals the loaded lock has (some have two).</summary>
+    int Crystals
+    {
+        get
+        {
+            int n = 0;
+            if (puzzle?.Level != null)
+                foreach (var b in puzzle.Level.blocks)
+                    if (b.kind == S3Laser.Kind.Goal) n++;
+            return n;
+        }
+    }
+    string TheCrystal => Crystals > 1 ? "the crystals" : "the crystal";
 
     /// <summary>While sealed, the barrier dome over the green turns the ball away.</summary>
     void CollideBarrier()
@@ -350,6 +368,7 @@ public class S3Golf : MonoBehaviour
         lastShot = ball.Foot;
         state = State.Ready;
         world.SetActiveCup(Hole.cup);
+        world.SetActiveHole(index);
         Vector4 toTee = S3.DirTo(Hole.cup, Hole.tee);
         S3World.SetFrame(flagRenderer, S3.FrameAt(Hole.cup, S3.EY, toTee == Vector4.zero ? S3.EZ : toTee));
         aimDir = viewDir = DirectionToCup();
@@ -379,7 +398,7 @@ public class S3Golf : MonoBehaviour
         float dist = world.GroundDistance(Hole.tee, Hole.cup);
         Say($"Hole {index + 1}  ·  Par {Hole.par}  ·  {dist:0} m" +
             (dist > 0.97f * Mathf.PI * R ? "\nThe cup is at your antipode: every direction leads there." : "") +
-            (locked ? "\nSealed in ice: light the crystal. F to golf whenever you're ready." : ""), 5.5f);
+            (locked ? $"\nSealed in ice: light {TheCrystal}. F to golf whenever you're ready." : ""), 5.5f);
         if (locked) ShowHint(10f);
         UpdateVisuals();
     }
@@ -580,6 +599,7 @@ public class S3Golf : MonoBehaviour
         powerSelecting = false;
         lastShot = ball.Foot;
         ball.Launch(ShotDirection, LaunchSpeed(p, R), aimAngle * Mathf.Deg2Rad);
+        steepShot = aimAngle >= 60;
         S3Audio.Hit(p);
         strokes++; total++;
         state = State.Moving;
@@ -596,10 +616,13 @@ public class S3Golf : MonoBehaviour
         accumulator += Mathf.Min(dt, 0.1f);
         moveTime += dt;
         float friction = rollFrictionUnits * R;
+        solids.Clear();
+        if (puzzle != null) solids.AddRange(puzzle.blocks);
+        solids.AddRange(world.fences);
         while (accumulator >= Step)
         {
             accumulator -= Step;
-            ball.Step(Step, friction, world.obstacles, puzzle?.blocks);
+            ball.Step(Step, friction, world.obstacles, solids);
             S3Audio.Land(ball.impact);
             if (locked) CollideBarrier();
             shotMaxHeight = Mathf.Max(shotMaxHeight, ball.HeightM - ballRadius);
@@ -744,12 +767,41 @@ public class S3Golf : MonoBehaviour
             S3World.SetFrame(restRenderer, S3.FrameAt(ball.Foot, S3.EY, aimDir));
         }
         bool aiming = state == State.Ready && !exploring;
+        UpdateAntipodes(aiming);
         Vector4 d = ShotDirection;
         arrowRenderer.enabled = guideRenderer.enabled = aiming && d != Vector4.zero;
         if (!arrowRenderer.enabled) return;
         S3World.SetFrame(arrowRenderer, S3.FrameAt(ball.Foot, S3.EY, d));
         S3World.SetFrame(guideRenderer, S3.FrameAt(ball.pos, S3.UpAt(ball.pos), d) *
                                         S3.PlaneRotation(S3.EZ, S3.EY, aimAngle * Mathf.Deg2Rad));
+    }
+
+    /// <summary>How strongly to show where a straight-up shot would come down (fades in as you aim steeply).</summary>
+    float Steepness => Mathf.InverseLerp(58f, 78f, aimAngle);
+
+    /// <summary>
+    /// The beacon at the ball's antipode while you aim steeply or a steep shot is in the air: where a ball hit
+    /// straight over the pole comes down.
+    /// </summary>
+    void UpdateAntipodes(bool aiming)
+    {
+        bool playing = state != State.Sunk && state != State.Finished;
+        if (!beaconRenderer) return;
+        float show = aiming ? Steepness : state == State.Moving && steepShot ? 1 : 0;
+        beaconRenderer.enabled = playing && show > 0.01f;
+        if (!beaconRenderer.enabled) return;
+        Vector4 at = aiming ? -ball.Foot : -lastShot;
+        S3World.SetFrame(beaconRenderer, S3.FrameAt(at, S3.EY, S3.Ortho(S3.EZ, at, S3.EY) == Vector4.zero ? S3.EX : S3.EZ));
+        SetGlow(beaconRenderer, show * (1.2f + 0.25f * Mathf.Sin(Time.time * 3f)), 0.4f);
+    }
+
+    void SetGlow(Renderer r, float intensity, float shimmer)
+    {
+        glowBlock ??= new MaterialPropertyBlock();
+        r.GetPropertyBlock(glowBlock);
+        glowBlock.SetFloat("_Intensity", intensity);
+        glowBlock.SetFloat("_Shimmer", shimmer);
+        r.SetPropertyBlock(glowBlock);
     }
 
     void Say(string text, float seconds)
@@ -856,9 +908,11 @@ public class S3Golf : MonoBehaviour
 
         string hint = "";
         if (mouseFree) hint = "Click to play";
+        else if (aiming && !powerSelecting && world.GroundDistance(ball.Foot, -Hole.cup) < world.greenRadius)
+            hint = "On the flag's antipode: hit it straight up (W) at full power and it comes down on the green";
         else if (aiming) hint = powerSelecting ? "Space  shoot   ·   Right-click  cancel" : "A/D  aim   ·   W/S  height   ·   Space  power";
         else if (state == State.Ready && NearBall) hint = $"{(puzzle == null ? "E" : "F")}  address ball";
-        else if (state == State.Ready && locked) hint = "Light the crystal to open the cup";
+        else if (state == State.Ready && locked) hint = $"Light {TheCrystal} to open the cup";
         Shadowed(new Rect(0, h - 120, w, 30), hint, hintStyle);
         DrawFooter(h);
 
@@ -916,6 +970,11 @@ public class S3Golf : MonoBehaviour
             }
         if (ball == null) return;
         DrawMarker(S3.Lift(Hole.cup, 2.9f / R), new Color(1f, 0.85f, 0.25f), $"{world.GroundDistance(player.ViewFrame().GetColumn(3), Hole.cup):0} m", "▼");
+        if (state == State.Ready && !exploring && Steepness > 0)
+        {
+            var c = new Color(0.55f, 0.9f, 1f, Steepness);
+            DrawMarker(S3.Lift(-ball.Foot, 2.2f / R), c, $"over the pole: {world.GroundDistance(-ball.Foot, Hole.cup):0} m from the pin", "◎");
+        }
         if (exploring && state != State.Sunk)
         {
             // the ball's marker says what it's doing, and pops when it comes to rest
@@ -964,6 +1023,7 @@ public class S3Golf : MonoBehaviour
         "Tab walk around  ·  E / F address ball  ·  B replay last spot (+1)  ·  R restart  ·  N start over",
         "Laser:   click place / pick up  ·  Q/E turn  ·  1 / 2 or wheel switch piece  ·  H puzzle hint",
         "Walking:   WASD, Shift run, Space jump  ·  M next map  ·  Esc free the mouse",
+        "Antipodes:   straight up at full power, a ball comes down 37.7 m away",
     };
 
     /// <summary>Every hole and puzzle, one column per map (the one you're on highlighted), and the controls.</summary>

@@ -1,0 +1,6 @@
+[S3] lock shortcuts
+hole 1 Parallel Lines: one mirror works near the meeting point (23 spots), its antipode (0), the laser's antipode (0), nowhere else
+hole 2 Crossfire: one mirror works only at the far crossing (8 spots, all within 0.6 m)
+hole 3 Back Door: one mirror never works; 168 two-mirror solutions, the second mirror always within 1.0 m of the first one's antipode
+hole 4 Starburst: with the diffractor at the sealed crystal's antipode, a mirror works 2.1-2.9, 6.7 m from the laser
+hole 5 The Long Night: one mirror and the diffractor never work; 501 two-mirror solutions, the second mirror always within 2.2 m of the first one's antipode

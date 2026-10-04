@@ -39,15 +39,32 @@ public class S3World : MonoBehaviour
     /// <summary>The campaign: Meadow teaches golf, Desert teaches the laser, the Eternal Poles need both.</summary>
     public enum Biome { Meadow, Desert, Basin }
 
-    /// <summary>A laser puzzle laid out around a ground frame (local x, z metres; yaw degrees from +z towards +x).</summary>
+    /// <summary>
+    /// A laser puzzle laid out around a ground frame (local x, z metres; yaw degrees from +z towards +x).
+    /// variant picks which of the template's equivalent intended solutions is the reference one (see S3Levels.Build).
+    /// </summary>
     [Serializable]
     public struct LockDef
     {
         public S3Levels.Template template;
         public float x, z, yaw;
         public bool mirror;
-        public LockDef(S3Levels.Template template, float x, float z, float yaw, bool mirror = false)
-        { this.template = template; this.x = x; this.z = z; this.yaw = yaw; this.mirror = mirror; }
+        public int variant;
+        public LockDef(S3Levels.Template template, float x, float z, float yaw, bool mirror = false, int variant = 0)
+        { this.template = template; this.x = x; this.z = z; this.yaw = yaw; this.mirror = mirror; this.variant = variant; }
+    }
+
+    /// <summary>
+    /// A fence shutting the side of a green that faces its tee (Eternal Poles), so the open side faces the far side of
+    /// the world: the tee's antipode, where a ball hit straight over the pole comes down. An arc round the cup at radius
+    /// metres, halfSpan degrees either side of the direction to the tee. Like a lock, it only stands while its hole is on.
+    /// </summary>
+    [Serializable]
+    public struct FenceDef
+    {
+        public int hole;   // index into basinCourse
+        public float radius, halfSpan;
+        public FenceDef(int hole, float radius, float halfSpan) { this.hole = hole; this.radius = radius; this.halfSpan = halfSpan; }
     }
 
     /// <summary>Per-map lighting. Colours are authored in sRGB like the vertex colours.</summary>
@@ -89,7 +106,7 @@ public class S3World : MonoBehaviour
         sunColor = new Color(0.52f, 0.49f, 0.42f),
         skyAmbient = new Color(0.68f, 0.72f, 0.78f),
         groundAmbient = new Color(0.48f, 0.50f, 0.40f),
-        haze = new Color(0.82f, 0.90f, 0.96f, 0.22f),
+        haze = new Color(0.82f, 0.90f, 0.96f, 0.14f),
         shadowTint = new Color(0.55f, 0.62f, 0.60f),
         shadowStrength = 0.55f,
     };
@@ -99,7 +116,7 @@ public class S3World : MonoBehaviour
         sunColor = new Color(0.78f, 0.58f, 0.36f),
         skyAmbient = new Color(0.62f, 0.52f, 0.56f),
         groundAmbient = new Color(0.62f, 0.46f, 0.34f),
-        haze = new Color(0.97f, 0.80f, 0.70f, 0.5f),
+        haze = new Color(0.97f, 0.80f, 0.70f, 0.32f),
         shadowTint = new Color(0.62f, 0.52f, 0.62f),
         shadowStrength = 0.6f,
     };
@@ -109,7 +126,7 @@ public class S3World : MonoBehaviour
         sunColor = new Color(0.42f, 0.38f, 0.34f),
         skyAmbient = new Color(0.66f, 0.74f, 0.88f),
         groundAmbient = new Color(0.72f, 0.78f, 0.88f),
-        haze = new Color(0.86f, 0.92f, 1.0f, 0.4f),
+        haze = new Color(0.86f, 0.92f, 1.0f, 0.16f),   // light, so the far side overhead stays sharp
         shadowTint = new Color(0.55f, 0.65f, 0.85f),
         shadowStrength = 0.5f,
     };
@@ -137,9 +154,11 @@ public class S3World : MonoBehaviour
     [Tooltip("Where the laser puzzles stand: local x, z metres, and yaw (degrees) of their north.")]
     public Vector3 puzzleFrame = new Vector3(0, 0, 0);
 
-    // The Eternal Poles: every cup is sealed under an ice barrier until a laser lights the crystal
-    // beside it. The locks are puzzles of their own (frozen mirrors, a prism, twin lasers, the
-    // antipode), placed (and checked by S3Setup) so the solved light misses the tees and greens.
+    // The Eternal Poles: every cup is sealed under an ice barrier until a laser lights the crystals
+    // beside it. The locks are puzzles of their own, each built on something only this closed, curved
+    // world allows (parallel lines meeting, lines crossing twice, a beam hopped back onto its own line
+    // from half a world away, a diffractor's light gathering at its antipode), placed by S3Setup.SearchLocks
+    // so the solved light keeps clear of the sealed green, and checked by TestPuzzles and TestShortcuts.
     // You start each hole on foot. The frozen lake is only scenery.
     [Header("Eternal Poles")]
     public HoleDef[] basinCourse =
@@ -155,11 +174,18 @@ public class S3World : MonoBehaviour
     public LockDef[] basinLocks =
     {
         // found by S3Setup.SearchLocks, checked by TestPuzzles and TestShortcuts
-        new LockDef(S3Levels.Template.FrozenMirror, 5f, 2f, 240),
-        new LockDef(S3Levels.Template.Prism, -3.13f, 4.04f, 240, true),
-        new LockDef(S3Levels.Template.TwinBeams, 4.92f, -13.16f, 195, true),
-        new LockDef(S3Levels.Template.Homecoming, -2.05f, 8.85f, 150),        // its mirror goes by the tee: the crystal's antipode
-        new LockDef(S3Levels.Template.FrozenRelay, -16.18f, -12.35f, 270, true),
+        new LockDef(S3Levels.Template.ParallelLines, 3f, 1.5f, 255),            // its mirror goes a quarter lap north of the laser
+        new LockDef(S3Levels.Template.Crossfire, -4.13f, -4.46f, 300, false, 2),
+        new LockDef(S3Levels.Template.BackDoor, 8.92f, -14.66f, 75, false, 1),
+        new LockDef(S3Levels.Template.Starburst, -15.05f, 0.85f, 30),           // its diffractor goes by the tee: the sealed crystal's antipode
+        new LockDef(S3Levels.Template.LongNight, -12.68f, -15.35f, 240, false, 1),
+    };
+    [Tooltip("Fences shutting the tee side of some greens (hole index from 0, arc radius m, half span degrees).")]
+    public FenceDef[] basinFences =
+    {
+        new FenceDef(1, 4.4f, 115),
+        new FenceDef(2, 4.4f, 115),
+        new FenceDef(4, 4.4f, 125),
     };
     [Tooltip("The frozen lake: local x, z metres and radius.")]
     public Vector3 basinLake = new Vector3(0, 17.5f, 6.8f);
@@ -168,6 +194,11 @@ public class S3World : MonoBehaviour
 
     [NonSerialized] public readonly List<Hole> holes = new List<Hole>();
     [NonSerialized] public readonly List<Obstacle> obstacles = new List<Obstacle>();
+    /// <summary>The active hole's golf fences (Eternal Poles), as boxes: they stop the ball and the walker, but light slips between their rails.</summary>
+    [NonSerialized] public readonly List<S3Laser.Block> fences = new List<S3Laser.Block>();
+    /// <summary>Every hole's fences and their renderers (see SetActiveHole).</summary>
+    [NonSerialized] public readonly Dictionary<int, List<S3Laser.Block>> holeFences = new Dictionary<int, List<S3Laser.Block>>();
+    [NonSerialized] public readonly Dictionary<int, Renderer> fenceRenderers = new Dictionary<int, Renderer>();
     /// <summary>Desert: the puzzles in order. Basin: the lock on each hole's cup.</summary>
     [NonSerialized] public readonly List<S3Levels.Level> levels = new List<S3Levels.Level>();
 
@@ -289,6 +320,9 @@ public class S3World : MonoBehaviour
         ClearChildren();
         holes.Clear();
         obstacles.Clear();
+        fences.Clear();
+        holeFences.Clear();
+        fenceRenderers.Clear();
         fadeProps.Clear();
         casters.Clear();
         patchCount = 0;
@@ -466,7 +500,7 @@ public class S3World : MonoBehaviour
                 levels.Add(BuildLock(basinLocks[i]));
     }
 
-    public S3Levels.Level BuildLock(LockDef d) => S3Levels.Build(d.template, LocalFrame(d.x, d.z, d.yaw), radius, d.mirror);
+    public S3Levels.Level BuildLock(LockDef d) => S3Levels.Build(d.template, LocalFrame(d.x, d.z, d.yaw), radius, d.mirror, d.variant);
 
     void PushGlobals()
     {
@@ -484,8 +518,7 @@ public class S3World : MonoBehaviour
         Shader.SetGlobalFloat("_S3GreenR", greenRadius);
         Shader.SetGlobalVectorArray(PatchID, patches);
         Shader.SetGlobalFloatArray(PatchRID, patchRadii);
-        Shader.SetGlobalFloat("_S3PatchCount", patchCount);
-    }
+        Shader.SetGlobalFloat("_S3PatchCount", patchCount);    }
 
     /// <summary>Camera frame in SO(4): columns (right, up, forward, eye position).</summary>
     public void SetCamera(Matrix4x4 cameraFrame)
@@ -495,6 +528,23 @@ public class S3World : MonoBehaviour
     }
 
     public void SetActiveCup(Vector4 cup) => Shader.SetGlobalVector("_S3Hole", cup);
+
+    /// <summary>Puts up the fences of the hole being played (index into holes) and takes the others down.</summary>
+    public void SetActiveHole(int index)
+    {
+        fences.Clear();
+        if (holeFences.TryGetValue(index, out var own)) fences.AddRange(own);
+        foreach (var kv in fenceRenderers)
+            if (kv.Value) kv.Value.enabled = kv.Key == index;
+    }
+
+    /// <summary>Is a ground point within marginM metres of a golf fence?</summary>
+    public bool FenceAt(Vector4 foot, float marginM)
+    {
+        foreach (var f in fences)
+            if (f.FootprintContains(foot, marginM / radius)) return true;
+        return false;
+    }
 
     /// <summary>Ground distance in metres between two points (their feet).</summary>
     public float GroundDistance(Vector4 a, Vector4 b) => S3.Dist(S3.Foot(a), S3.Foot(b)) * radius;

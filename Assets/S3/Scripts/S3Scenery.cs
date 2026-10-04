@@ -61,7 +61,9 @@ public static class S3Scenery
         {
             foreach (var p in S3Levels.SolutionFootprint(level, world.radius)) keep.Add(new KeepOut(p, 1.1f));
             foreach (var b in level.solution) keep.Add(new KeepOut(b.position, 2f));   // room to stand and place
-            if (level.diffractors > 0 && level.Goal != null) keep.Add(new KeepOut(level.Goal.position, 3f));   // the diffracted light comes down here
+            if (level.diffractors > 0)   // the diffracted light comes down round the crystals
+                foreach (var b in level.blocks)
+                    if (b.kind == S3Laser.Kind.Goal) keep.Add(new KeepOut(b.position, 3f));
         }
         if (world.biome == S3World.Biome.Desert)   // an open arena for the puzzles
             keep.Add(new KeepOut(world.LocalFrame(world.puzzleFrame.x, world.puzzleFrame.y, world.puzzleFrame.z) *
@@ -70,13 +72,13 @@ public static class S3Scenery
     }
 
     /// <summary>
-    /// A landmark at its preferred spot, or the nearest clear spot to it (spiralling outwards), so
-    /// fixed buildings never land on a puzzle's light. Returns false if nothing nearby is clear.
+    /// A landmark at its preferred spot, or the nearest clear spot to it (spiralling outwards: 600 tries reach ~18 m,
+    /// 2400 the whole world), so fixed buildings never land on a puzzle's light. Returns false if nothing is clear.
     /// </summary>
-    static bool FixedSpot(S3World world, List<KeepOut> keep, float x, float z, float yawDeg, float radius, out Matrix4x4 frame)
+    static bool FixedSpot(S3World world, List<KeepOut> keep, float x, float z, float yawDeg, float radius, out Matrix4x4 frame, int tries = 600)
     {
         float R = world.radius;
-        for (int k = 0; k < 160; k++)
+        for (int k = 0; k < tries; k++)
         {
             float d = 0.75f * Mathf.Sqrt(k), a = k * 2.39996f;   // golden-angle spiral
             frame = S3.GroundFrame(x + d * Mathf.Cos(a), z + d * Mathf.Sin(a), yawDeg * Mathf.Deg2Rad, R);
@@ -305,7 +307,7 @@ public static class S3Scenery
 
     static readonly Color Snow = new Color(0.94f, 0.96f, 0.99f);
     static readonly Color SnowShade = new Color(0.79f, 0.85f, 0.93f);
-    static readonly Color PineGreen = new Color(0.18f, 0.36f, 0.31f);
+    static readonly Color PineGreen = new Color(0.23f, 0.43f, 0.40f);
     static readonly Color IceLight = new Color(0.79f, 0.93f, 0.97f);
     static readonly Color IceMid = new Color(0.62f, 0.84f, 0.93f);
     static readonly Color IceRoof = new Color(0.44f, 0.71f, 0.89f);
@@ -318,14 +320,37 @@ public static class S3Scenery
         var keep = CourseKeepOut(world);
         var lake = world.basinLake;
         world.RegisterPatch(S3.GroundPoint(lake.x, lake.y, R), lake.z);   // the frozen lake (cosmetic)
+        // small decoration doesn't stop anything, so it may lie in the light too: it only keeps off tees, greens,
+        // the lake, the locks' own blocks and pieces, and whatever has been put down already
+        var decor = new List<KeepOut>();
+        foreach (var h in world.holes) { decor.Add(new KeepOut(h.tee, 3f)); decor.Add(new KeepOut(h.cup, world.greenRadius + 1f)); }
+        decor.Add(new KeepOut(S3.GroundPoint(lake.x, lake.y, R), lake.z));
+        foreach (var level in world.levels)
+        {
+            foreach (var b in level.blocks) decor.Add(new KeepOut(b.position, 0.6f + b.size.x));
+            foreach (var b in level.solution) decor.Add(new KeepOut(b.position, 1f));
+        }
+        int fenceKeep = keep.Count;
+        BuildFences(world, keep);
+        for (int i = fenceKeep; i < keep.Count; i++) decor.Add(keep[i]);
+        // new props that stop the ball stay off the straight line from each tee to its cup (the fences are the obstacles there)
+        var lines = new List<KeepOut>();
+        foreach (var h in world.holes)
+        {
+            Vector4 d = S3.DirTo(h.tee, h.cup);
+            float len = S3.Dist(h.tee, h.cup);
+            if (d == Vector4.zero || len > 0.97f * Mathf.PI) continue;   // the antipode hole has no one line
+            for (float t = 0; t <= len; t += 1f / R) lines.Add(new KeepOut(S3.Walk(h.tee, d, t), 1.5f));
+        }
 
         // landmarks, after the concept: ice castle across the lake, an igloo by the shore, a snowman by the first tee
-        if (FixedSpot(world, keep, -12.5f, 22f, 35, 5.5f, out var f))
+        if (FixedSpot(world, keep, -12.5f, 22f, 35, 4.6f, out var f, 2400))
         {
             var mb = new MeshBuilder();
             IceCastle(mb);
             Add(world, scene, mb, f, 4.6f, 9f, 0, 0.2f, 3.8f, 8f, 4.2f, 6f);
             keep.Add(new KeepOut(f.GetColumn(3), 5.5f));
+            decor.Add(new KeepOut(f.GetColumn(3), 4.5f));
         }
         if (FixedSpot(world, keep, 7.5f, 14f, -160, 2.6f, out f))
         {
@@ -333,6 +358,7 @@ public static class S3Scenery
             Igloo(mb);
             Add(world, scene, mb, f, 2.2f, 2.2f, 0, 0.25f, 1.8f, 1.8f, 2f, 1.8f);
             keep.Add(new KeepOut(f.GetColumn(3), 2.8f));
+            decor.Add(new KeepOut(f.GetColumn(3), 2.6f));
         }
         if (world.holes.Count > 0)
         {
@@ -343,32 +369,35 @@ public static class S3Scenery
                 Snowman(mb);
                 Add(world, scene, mb, f, 0.8f, 2.3f, 0, 0.15f, 0.55f, 2f, 0.8f, 2.2f);
                 keep.Add(new KeepOut(f.GetColumn(3), 1f));
+                decor.Add(new KeepOut(f.GetColumn(3), 1f));
             }
         }
 
-        // snowy pines all over the world
-        for (int i = 0; i < 46; i++)
+        // snowy pines, sparse (and kept off the locks' light) so the puzzles read clearly
+        for (int i = 0; i < 24; i++)
         {
             if (!TryPlace(rng, R, keep, 1.8f, out var frame)) continue;
             var mb = new MeshBuilder();
-            float s = 0.85f + 0.45f * (float)rng.NextDouble();
+            float s = 0.75f + 0.35f * (float)rng.NextDouble();
             SnowyPine(mb, rng, s);
-            Add(world, scene, mb, frame, 1.5f * s, 4.8f * s, 0.15f, 0.35f, 0.3f * s, 6f, 1.4f * s, 4f * s);
+            Add(world, scene, mb, frame, 1.4f * s, 4.8f * s, 0.15f, 0.35f, 0.3f * s, 6f, 1.3f * s, 4f * s);
             keep.Add(new KeepOut(frame.GetColumn(3), 1.6f * s));
+            decor.Add(new KeepOut(frame.GetColumn(3), 0.8f));
         }
 
         // crystal spires
-        for (int i = 0; i < 14; i++)
+        for (int i = 0; i < 8; i++)
         {
             if (!TryPlace(rng, R, keep, 1.2f, out var frame)) continue;
             var mb = new MeshBuilder(0.6f);
             float h = Crystals(mb, rng);
             Add(world, scene, mb, frame, 1.1f, h, 0, 0.2f, 0.6f, h, 1f, h, 0.6f);
             keep.Add(new KeepOut(frame.GetColumn(3), 1.3f));
+            decor.Add(new KeepOut(frame.GetColumn(3), 1.1f));
         }
 
         // snowdrifts
-        for (int i = 0; i < 12; i++)
+        for (int i = 0; i < 9; i++)
         {
             float rx = 2.2f + 1.5f * (float)rng.NextDouble(), rz = 1.2f + 0.8f * (float)rng.NextDouble();
             if (!TryPlace(rng, R, keep, rx + 0.8f, out var frame)) continue;
@@ -376,13 +405,14 @@ public static class S3Scenery
             mb.Icosphere(new Vector3(0, -0.25f, 0), new Vector3(rx, 0.75f, rz), 2, Snow, rng, 0.05f);
             Add(world, scene, mb, frame, rx, 0.6f, 0, 0, Mathf.Min(rx, rz) * 0.7f, 0.5f, rx * 0.8f, 0.5f, 0.4f);
             keep.Add(new KeepOut(frame.GetColumn(3), rx));
+            decor.Add(new KeepOut(frame.GetColumn(3), rx));
         }
 
         // dark rocks with snow caps
-        for (int i = 0; i < 16; i++)
+        for (int i = 0; i < 11; i++)
         {
             float size = 0.45f + 1.1f * (float)(rng.NextDouble() * rng.NextDouble());
-            if (!TryPlace(rng, R, keep, size + 0.5f, out var frame)) continue;
+            if (!TryPlace(rng, R, keep, size + 0.5f, out var frame, attempts: 120)) continue;
             var mb = new MeshBuilder(0.6f);
             float g = 0.30f + 0.06f * (float)rng.NextDouble();
             mb.Icosphere(new Vector3(0, size * 0.3f, 0), new Vector3(size * 1.1f, size * 0.75f, size), 1,
@@ -390,17 +420,270 @@ public static class S3Scenery
                          c => c.y > 0.45f ? Snow : new Color(g, g * 1.05f, g * 1.2f));
             Add(world, scene, mb, frame, size * 1.1f, size, 0, 0.3f, size * 0.95f, size, size, size, 0.8f);
             keep.Add(new KeepOut(frame.GetColumn(3), size + 0.4f));
+            decor.Add(new KeepOut(frame.GetColumn(3), size + 0.2f));
         }
 
-        // frosted reeds poking through the snow
-        for (int i = 0; i < 260; i++)
+        // rock instead of trees for the rest: tors, cairns and arches of ice that stop the ball, kept off the
+        // obvious lines and the locks' light. Scattered all round the world, they also give the far side, which
+        // hangs overhead as the sky, something to show
+        var solid = new List<KeepOut>(keep);
+        solid.AddRange(lines);
+        void KeepClear(Vector4 p, float r) { keep.Add(new KeepOut(p, r)); solid.Add(new KeepOut(p, r)); decor.Add(new KeepOut(p, r)); }
+        for (int i = 0; i < 8; i++)
         {
-            if (!TryPlace(rng, R, keep, 0.2f, out var frame, attempts: 3)) continue;
+            var mb = new MeshBuilder(0.6f);
+            float reach = Tor(mb, rng);
+            if (!TryPlace(rng, R, solid, reach, out var frame, attempts: 300)) continue;
+            Add(world, scene, mb, frame, reach, 1.6f, 0, 0.3f, reach * 0.8f, 1.4f, reach, 1.4f, 0.8f);
+            KeepClear(frame.GetColumn(3), reach + 0.5f);
+        }
+        for (int i = 0; i < 5; i++)
+        {
+            if (!TryPlace(rng, R, solid, 0.9f, out var frame, attempts: 200)) continue;
+            var mb = new MeshBuilder(0.4f);
+            float h = Cairn(mb, rng);
+            Add(world, scene, mb, frame, 0.6f, h + 0.3f, 0, 0.25f, 0.4f, h, 0.6f, h, 0.6f);
+            KeepClear(frame.GetColumn(3), 1f);
+        }
+        for (int i = 0, tries = 0; i < 2 && tries < 400; tries++)
+        {
+            // only the legs need clear ground: the ball, the walker and the light all pass under the span
+            var mb = new MeshBuilder(0.5f);
+            float half = IceArch(mb, rng, out float rise);
+            if (!TryPlace(rng, R, keep, 0.5f, out var frame, attempts: 1)) continue;
+            Vector4 left = (frame * S3.Exp(new Vector3(-half, 0, 0), R)).normalized, right = (frame * S3.Exp(new Vector3(half, 0, 0), R)).normalized;
+            if (!Clear(left, R, solid, 0.6f) || !Clear(right, R, solid, 0.6f)) continue;
+            Add(world, scene, mb, frame, half + 0.6f, rise + 0.5f, 0, 0.15f, shadowRadius: half, shadowHeight: rise, shadowStrength: 0.5f);
+            foreach (var leg in new[] { left, right })
+            {
+                world.obstacles.Add(new S3World.Obstacle(leg, 0.45f, rise));
+                KeepClear(leg, 1.1f);
+            }
+            i++;
+        }
+
+        // frozen ponds (cosmetic, like the lake)
+        var open = new List<KeepOut>();
+        foreach (var h in world.holes) { open.Add(new KeepOut(h.tee, 3f)); open.Add(new KeepOut(h.cup, world.greenRadius + 2f)); }
+        open.Add(new KeepOut(S3.GroundPoint(lake.x, lake.y, R), lake.z + 2f));
+        for (int i = 0; i < 4; i++)
+        {
+            float r = 2f + 1.6f * (float)rng.NextDouble();
+            if (!TryPlace(rng, R, open, r + 1f, out var frame)) continue;
+            world.RegisterPatch(frame.GetColumn(3), r);
+            open.Add(new KeepOut(frame.GetColumn(3), r + 1f));
+            keep.Add(new KeepOut(frame.GetColumn(3), r + 0.3f));
+            decor.Add(new KeepOut(frame.GetColumn(3), r));
+        }
+
+        // small things that don't stop anything: pebbles, shards of ice, little mounds of snow, stones under the snow,
+        // and frosted reeds
+        for (int i = 0; i < 60; i++)
+        {
+            if (!TryPlace(rng, R, decor, 0.3f, out var frame, attempts: 4)) continue;
+            var mb = new MeshBuilder(1f);
+            Pebbles(mb, rng);
+            Add(world, scene, mb, frame, occlusion: 0.2f);
+            decor.Add(new KeepOut(frame.GetColumn(3), 0.5f));
+        }
+        for (int i = 0; i < 30; i++)
+        {
+            if (!TryPlace(rng, R, decor, 0.4f, out var frame, attempts: 4)) continue;
+            var mb = new MeshBuilder(1f);
+            IceShards(mb, rng);
+            Add(world, scene, mb, frame, occlusion: 0.15f);
+            decor.Add(new KeepOut(frame.GetColumn(3), 0.5f));
+        }
+        for (int i = 0; i < 24; i++)
+        {
+            float rx = 0.6f + 0.7f * (float)rng.NextDouble();
+            if (!TryPlace(rng, R, decor, rx, out var frame, attempts: 4)) continue;
+            var mb = new MeshBuilder(1f);
+            mb.Icosphere(new Vector3(0, -0.12f, 0), new Vector3(rx, 0.32f, rx * (0.6f + 0.3f * (float)rng.NextDouble())), 1,
+                         Color.Lerp(Snow, SnowShade, 0.25f * (float)rng.NextDouble()), rng, 0.06f);
+            Add(world, scene, mb, frame, occlusion: 0.15f, shadowRadius: rx * 0.8f, shadowHeight: 0.3f, shadowStrength: 0.25f);
+            decor.Add(new KeepOut(frame.GetColumn(3), rx));
+        }
+        for (int i = 0; i < 40; i++)
+        {
+            if (!TryPlace(rng, R, decor, 0.5f, out var frame, attempts: 4)) continue;
+            var mb = new MeshBuilder(1f);
+            float s = 0.25f + 0.35f * (float)rng.NextDouble(), g = 0.32f + 0.08f * (float)rng.NextDouble();
+            mb.Icosphere(new Vector3(0, -0.02f, 0), new Vector3(s, 0.07f, s * 0.8f), 1, new Color(g, g * 1.04f, g * 1.16f), rng, 0.2f,
+                         c => c.y > 0.6f ? Color.Lerp(Snow, SnowShade, 0.3f) : new Color(g, g * 1.04f, g * 1.16f));
+            Add(world, scene, mb, frame, occlusion: 0f);
+        }
+        for (int i = 0; i < 140; i++)
+        {
+            if (!TryPlace(rng, R, decor, 0.2f, out var frame, attempts: 3)) continue;
             var mb = new MeshBuilder(1f);
             FrostTuft(mb, rng);
             Add(world, scene, mb, frame, sway: 0.6f, occlusion: 0.25f);
         }
         return scene;
+    }
+
+    // ------------------------------------------------------------------ eternal poles: fences and rock
+
+    /// <summary>
+    /// The golf fences (S3World.basinFences): post-and-rail panels in an arc round the tee side of a green, left out
+    /// where that hole's lock stands. Each hole's panels are boxes in world.holeFences (they stop the ball and the
+    /// walker while the hole is on; light slips between the rails) and get a renderer of their own, so S3World.SetActiveHole
+    /// can put them up and take them down. Other props keep clear of every fence, and of the open side's approach:
+    /// the way in from the tee's antipode, where a shot straight over the pole comes down.
+    /// </summary>
+    static void BuildFences(S3World world, List<KeepOut> keep)
+    {
+        float R = world.radius;
+        foreach (var def in world.basinFences)
+        {
+            if (def.hole < 0 || def.hole >= world.holes.Count) continue;
+            var hole = world.holes[def.hole];
+            var own = def.hole < world.levels.Count ? world.levels[def.hole] : null;
+            Vector4 toTee = S3.DirTo(hole.cup, hole.tee);
+            if (toTee == Vector4.zero) toTee = S3.Ortho(S3.EZ, hole.cup, S3.EY);
+            float span = 2 * def.halfSpan * Mathf.Deg2Rad;
+            int n = Mathf.Max(2, Mathf.CeilToInt(span * def.radius / 1.4f));
+            var pts = new Vector4[n + 1];
+            for (int k = 0; k <= n; k++)
+                pts[k] = S3.Walk(hole.cup, S3Laser.Turn(toTee, hole.cup, -def.halfSpan * Mathf.Deg2Rad + span * k / n), def.radius / R);
+            var panels = new S3Laser.Block[n];
+            for (int k = 0; k < n; k++)
+            {
+                var panel = S3Laser.Block.Wall(pts[k], pts[k + 1], R, 0.16f, 1.2f);
+                bool clear = own == null || (!own.blocks.Exists(b => panel.FootprintOverlaps(b, 0.25f / R))
+                                             && !own.solution.Exists(b => panel.FootprintContains(b.position, 1.4f / R)));
+                if (clear) panels[k] = panel;
+            }
+            var list = new List<S3Laser.Block>();
+            var mesh = new MeshBuilder();
+            for (int k = 0; k < n; k++)
+            {
+                var panel = panels[k];
+                if (panel == null) continue;
+                list.Add(panel);
+                var mb = new MeshBuilder(0.4f);
+                float hl = S3.Dist(pts[k], pts[k + 1]) * R / 2;
+                FencePanel(mb, hl, true, k == n - 1 || panels[k + 1] == null);
+                mesh.AppendBaked(mb, S3.FrameAt(panel.position, S3.EY, S3.DirTo(panel.position, pts[k + 1])), R, 0, 0, 0.3f);
+                keep.Add(new KeepOut(panel.position, hl + 0.8f));
+            }
+            world.holeFences[def.hole] = list;
+            world.fenceRenderers[def.hole] = world.CreateRenderer($"Fence {def.hole + 1}", mesh.ToMesh($"S3 Fence {def.hole + 1}"), world.objectMaterial, Matrix4x4.identity).GetComponent<Renderer>();
+            // keep the approach from the open side clear, out to past where a shot over the pole from the tee lands
+            Vector4 back = -toTee;
+            float land = Mathf.PI - S3.Dist(hole.tee, hole.cup);
+            for (float t = (def.radius + 0.5f) / R; t <= land + 2f / R; t += 1f / R)
+                keep.Add(new KeepOut(S3.Walk(hole.cup, back, t), 1.8f));
+        }
+    }
+
+    /// <summary>One fence panel along local z (-hl..hl): posts capped with snow, two rails clear of the light (0.45 m up), a drift at its foot.</summary>
+    static void FencePanel(MeshBuilder mb, float hl, bool startPost, bool endPost)
+    {
+        var post = new Color(0.36f, 0.26f, 0.19f);
+        var rail = new Color(0.48f, 0.35f, 0.25f);
+        void Post(float z)
+        {
+            mb.Box(new Vector3(-0.07f, 0, z - 0.07f), new Vector3(0.07f, 1.22f, z + 0.07f), post);
+            mb.Frustum(new Vector3(0, 1.22f, z), 0.11f, 0.03f, 0.13f, 6, Snow);
+        }
+        if (startPost) Post(-hl);
+        if (endPost) Post(hl);
+        foreach (float y in new[] { 0.18f, 0.78f })
+        {
+            mb.Box(new Vector3(-0.03f, y, -hl), new Vector3(0.03f, y + 0.12f, hl), rail);
+            mb.Box(new Vector3(-0.045f, y + 0.12f, -hl), new Vector3(0.045f, y + 0.16f, hl), Snow);
+        }
+        mb.Icosphere(new Vector3(0, -0.06f, 0), new Vector3(0.26f, 0.2f, hl * 0.95f), 1, Color.Lerp(Snow, SnowShade, 0.2f));
+    }
+
+    /// <summary>A tor: a few snow-capped boulders heaped together. Returns how far it reaches from its centre.</summary>
+    static float Tor(MeshBuilder mb, System.Random rng)
+    {
+        int n = 3 + rng.Next(3);
+        float reach = 0;
+        for (int i = 0; i < n; i++)
+        {
+            float s = (i == 0 ? 0.9f : 0.4f) + 0.45f * (float)rng.NextDouble();
+            float a = 2 * Mathf.PI * (float)rng.NextDouble(), d = i == 0 ? 0 : 0.55f + 0.55f * (float)rng.NextDouble();
+            float g = 0.27f + 0.08f * (float)rng.NextDouble();
+            var rock = new Color(g, g * 1.04f, g * 1.18f);
+            mb.Icosphere(new Vector3(Mathf.Cos(a) * d, s * 0.35f, Mathf.Sin(a) * d), new Vector3(s * 1.1f, s * 0.8f, s), 1, rock, rng, 0.22f,
+                         c => c.y > 0.4f ? Snow : rock);
+            reach = Mathf.Max(reach, d + s);
+        }
+        return reach;
+    }
+
+    /// <summary>A cairn of flat stones with snow on top. Returns its height.</summary>
+    static float Cairn(MeshBuilder mb, System.Random rng)
+    {
+        int n = 4 + rng.Next(3);
+        float y = 0;
+        for (int i = 0; i < n; i++)
+        {
+            float w = Mathf.Lerp(0.42f, 0.16f, (float)i / n) * (0.85f + 0.3f * (float)rng.NextDouble());
+            float t = 0.14f + 0.08f * (float)rng.NextDouble(), g = 0.36f + 0.12f * (float)rng.NextDouble();
+            var stone = new Color(g, g * 1.02f, g * 1.1f);
+            var c = new Vector3(0.05f * ((float)rng.NextDouble() - 0.5f), y + t * 0.5f, 0.05f * ((float)rng.NextDouble() - 0.5f));
+            mb.Icosphere(c, new Vector3(w, t * 0.55f, w * 0.85f), 1, stone, rng, 0.12f, f => f.y > 0.7f ? Color.Lerp(stone, Snow, 0.7f) : stone);
+            y += t * 0.92f;
+        }
+        mb.Icosphere(new Vector3(0, y + 0.02f, 0), new Vector3(0.12f, 0.07f, 0.12f), 0, Snow);
+        return y;
+    }
+
+    /// <summary>A natural arch of blue ice with icicles under its span. Returns the half-width between its legs.</summary>
+    static float IceArch(MeshBuilder mb, System.Random rng, out float rise)
+    {
+        float half = 1.5f + 0.6f * (float)rng.NextDouble(), top = 2.1f + 0.8f * (float)rng.NextDouble();
+        rise = top;
+        var ice = new Color(IceMid.r, IceMid.g, IceMid.b, 0.8f);
+        var deep = new Color(IceRoof.r, IceRoof.g, IceRoof.b, 0.75f);
+        const int seg = 12;
+        float Radius(float u) => Mathf.Lerp(0.5f, 0.26f, Mathf.Sin(Mathf.PI * u));
+        Vector3 At(float u) => new Vector3(-half * Mathf.Cos(Mathf.PI * u), top * Mathf.Sin(Mathf.PI * u), 0.12f * Mathf.Sin(2 * Mathf.PI * u));
+        for (int k = 0; k < seg; k++)
+        {
+            float u0 = (float)k / seg, u1 = (float)(k + 1) / seg;
+            mb.Tube(At(u0) - (k == 0 ? Vector3.up * 0.2f : Vector3.zero), At(u1), Radius(u0), Radius(u1), 7, k % 3 == 1 ? deep : ice);
+        }
+        mb.Frustum(new Vector3(-half, 0, 0), 0.75f, 0.45f, 0.35f, 7, Snow);   // snow banked round the legs
+        mb.Frustum(new Vector3(half, 0, 0), 0.75f, 0.45f, 0.35f, 7, Snow);
+        for (int i = 1; i < 8; i++)
+        {
+            Vector3 p = At(0.2f + 0.6f * i / 8f) - Vector3.up * Radius(0.5f) * 0.8f;
+            float len = 0.15f + 0.25f * (float)rng.NextDouble();
+            mb.Tube(p, p - Vector3.up * len, 0.05f, 0.005f, 5, ice);
+        }
+        return half;
+    }
+
+    /// <summary>A few small stones, dusted with snow.</summary>
+    static void Pebbles(MeshBuilder mb, System.Random rng)
+    {
+        int n = 2 + rng.Next(4);
+        for (int i = 0; i < n; i++)
+        {
+            float s = 0.05f + 0.1f * (float)rng.NextDouble(), g = 0.3f + 0.15f * (float)rng.NextDouble();
+            var stone = new Color(g, g * 1.03f, g * 1.12f);
+            var c = new Vector3(((float)rng.NextDouble() - 0.5f) * 0.9f, s * 0.25f, ((float)rng.NextDouble() - 0.5f) * 0.9f);
+            mb.Icosphere(c, new Vector3(s, s * 0.6f, s * 0.8f), 0, stone, rng, 0.2f, f => f.y > 0.55f ? Color.Lerp(stone, Snow, 0.6f) : stone);
+        }
+    }
+
+    /// <summary>Two to four blades of ice sticking out of the snow.</summary>
+    static void IceShards(MeshBuilder mb, System.Random rng)
+    {
+        int n = 2 + rng.Next(3);
+        for (int i = 0; i < n; i++)
+        {
+            float a = 2 * Mathf.PI * (float)rng.NextDouble(), lean = 0.15f + 0.35f * (float)rng.NextDouble(), h = 0.2f + 0.4f * (float)rng.NextDouble();
+            var b = new Vector3(Mathf.Cos(a) * 0.12f, -0.05f, Mathf.Sin(a) * 0.12f);
+            var tip = b + new Vector3(Mathf.Cos(a) * lean * h, h, Mathf.Sin(a) * lean * h);
+            mb.Tube(b, tip, 0.06f + 0.03f * (float)rng.NextDouble(), 0.004f, 5, i % 2 == 0 ? new Color(IceLight.r, IceLight.g, IceLight.b, 0.7f) : new Color(IceMid.r, IceMid.g, IceMid.b, 0.7f));
+        }
     }
 
     static void SnowyPine(MeshBuilder mb, System.Random rng, float s)
@@ -409,9 +692,10 @@ public static class S3Scenery
         float g = (float)rng.NextDouble() * 0.05f;
         for (int k = 0; k < 3; k++)
         {
-            float y = (0.8f + 0.95f * k) * s, r = (1.45f - 0.38f * k) * s, h = 1.7f * s;
+            // slimmer tiers under thicker snow, so from above they read as frosted trees rather than dark blots
+            float y = (0.8f + 0.95f * k) * s, r = (1.3f - 0.34f * k) * s, h = 1.7f * s;
             mb.Frustum(new Vector3(0, y, 0), r, 0, h, 7, new Color(PineGreen.r + g, PineGreen.g + g, PineGreen.b + g), k * 0.4f);
-            mb.Frustum(new Vector3(0, y + h * 0.45f, 0), r * 0.58f, 0, h * 0.55f + 0.02f, 7, Snow, k * 0.4f);
+            mb.Frustum(new Vector3(0, y + h * 0.36f, 0), r * 0.68f, 0, h * 0.64f + 0.02f, 7, Snow, k * 0.4f);
         }
     }
 
@@ -485,7 +769,7 @@ public static class S3Scenery
     {
         int blades = 3 + rng.Next(3);
         float g = (float)rng.NextDouble();
-        var col = new Color(0.62f + 0.1f * g, 0.66f + 0.08f * g, 0.58f);
+        var col = new Color(0.70f + 0.08f * g, 0.74f + 0.06f * g, 0.68f);
         for (int i = 0; i < blades; i++)
         {
             float a = 2 * Mathf.PI * (float)rng.NextDouble();
@@ -543,8 +827,14 @@ public static class S3Scenery
                 }
                 else
                 {
-                    mb.Box(new Vector3(-hw, 0, -hl), new Vector3(hw, h, hl), IceLight);
-                    mb.Box(new Vector3(-hw - 0.04f, h, -hl - 0.04f), new Vector3(hw + 0.04f, h + 0.1f, hl + 0.04f), Snow);
+                    // a block of ice: a darker foot, faintly glowing ice, a cap of snow; one standing on its own
+                    // (a square pillar, like Crossfire's) gets a pointed ice top instead
+                    mb.Box(new Vector3(-hw, 0, -hl), new Vector3(hw, 0.16f, hl), IceMid);
+                    mb.Box(new Vector3(-hw, 0.16f, -hl), new Vector3(hw, h, hl), new Color(IceLight.r, IceLight.g, IceLight.b, 0.9f));
+                    if (hl < hw * 1.5f && h > 1.1f)
+                        mb.Frustum(new Vector3(0, h, 0), Mathf.Max(hw, hl) * 1.42f, 0, 0.75f, 4, new Color(IceMid.r, IceMid.g, IceMid.b, 0.8f), Mathf.PI / 4);
+                    else
+                        mb.Box(new Vector3(-hw - 0.04f, h, -hl - 0.04f), new Vector3(hw + 0.04f, h + 0.1f, hl + 0.04f), Snow);
                 }
                 break;
 
@@ -555,6 +845,12 @@ public static class S3Scenery
                 mb.Tube(new Vector3(0, 0.45f, hl + 0.1f), new Vector3(0, 0.45f, hl + 0.16f), 0.11f, 0.11f, 10, new Color(1f, 0.2f, 0.12f, 0f));
                 mb.Tube(new Vector3(0, h * 0.92f, -hl * 0.4f), new Vector3(0, h + 0.35f, -hl * 0.4f), 0.03f, 0.02f, 5, metal);
                 mb.Icosphere(new Vector3(0, h + 0.38f, -hl * 0.4f), Vector3.one * 0.06f, 0, new Color(1f, 0.25f, 0.15f, 0f));
+                for (int i = 0; i < 3; i++)   // cooling fins down both sides
+                    foreach (float side in new[] { -1f, 1f })
+                    {
+                        float y = 0.14f + 0.16f * i;
+                        mb.Box(new Vector3(side > 0 ? hw : -hw - 0.05f, y, -hl * 0.7f), new Vector3(side > 0 ? hw + 0.05f : -hw, y + 0.06f, hl * 0.5f), new Color(0.32f, 0.34f, 0.40f));
+                    }
                 break;
 
             case S3Laser.Kind.Goal:
@@ -566,6 +862,13 @@ public static class S3Scenery
                     mb.Tube(d * hw * 0.55f + Vector3.up * 0.3f, d * hw * 0.42f + Vector3.up * 0.95f, 0.05f, 0.03f, 5, metal);
                 }
                 mb.Icosphere(new Vector3(0, 0.82f, 0), new Vector3(0.3f, 0.43f, 0.3f), 0, new Color(0.62f, 0.45f, 1f, 0.55f));
+                mb.Frustum(new Vector3(0, 0.3f, 0), hw * 0.8f, hw * 0.78f, 0.04f, 16, new Color(0.75f, 0.6f, 1f, 0.45f));   // a glowing rim
+                for (int i = 0; i < 4; i++)   // small shards round the base
+                {
+                    float a = Mathf.PI / 2 * i;
+                    var d = new Vector3(Mathf.Cos(a), 0, Mathf.Sin(a));
+                    mb.Tube(d * hw * 0.9f, d * hw * 1.05f + Vector3.up * 0.28f, 0.05f, 0.004f, 5, new Color(0.7f, 0.58f, 1f, 0.6f));
+                }
                 break;
 
             case S3Laser.Kind.Mirror:
@@ -573,7 +876,17 @@ public static class S3Scenery
                 // a frozen (fixed) mirror has an ice frame and a cap of snow
                 var frame = b.movable ? new Color(0.32f, 0.34f, 0.40f) : IceRoof;
                 mb.OrientedBox(new Vector3(0, 0.73f, 0), Vector3.right, Vector3.up, Vector3.forward, new Vector3(hw - 0.06f, 0.53f, 0.025f), new Color(0.80f, 0.90f, 1f, 0.7f));
-                if (!b.movable) mb.Box(new Vector3(-hw - 0.05f, h, -0.09f), new Vector3(hw + 0.05f, h + 0.14f, 0.09f), Snow);
+                if (!b.movable)
+                {
+                    mb.Box(new Vector3(-hw - 0.05f, h, -0.09f), new Vector3(hw + 0.05f, h + 0.14f, 0.09f), Snow);
+                    // icicles along the top bar
+                    for (int i = 0; i < 6; i++)
+                    {
+                        float x = Mathf.Lerp(-hw + 0.14f, hw - 0.14f, i / 5f), len = 0.1f + 0.07f * ((i * 5) % 3);
+                        mb.Tube(new Vector3(x, h - 0.06f, 0.07f), new Vector3(x, h - 0.06f - len, 0.07f), 0.03f, 0.004f, 5, new Color(IceRoof.r, IceRoof.g, IceRoof.b, 0.75f));
+                        mb.Tube(new Vector3(x, h - 0.06f, -0.07f), new Vector3(x, h - 0.06f - len, -0.07f), 0.03f, 0.004f, 5, new Color(IceRoof.r, IceRoof.g, IceRoof.b, 0.75f));
+                    }
+                }
                 mb.Box(new Vector3(-hw, 0.12f, -0.05f), new Vector3(-hw + 0.07f, h, 0.05f), frame);
                 mb.Box(new Vector3(hw - 0.07f, 0.12f, -0.05f), new Vector3(hw, h, 0.05f), frame);
                 mb.Box(new Vector3(-hw, h - 0.07f, -0.05f), new Vector3(hw, h, 0.05f), frame);
@@ -587,6 +900,12 @@ public static class S3Scenery
                 mb.Frustum(Vector3.zero, hw * 0.9f, hw * 0.7f, 0.2f, 8, metal);
                 mb.Frustum(new Vector3(0, 0.2f, 0), 0.06f, 0.05f, 0.14f, 6, metal);
                 mb.Icosphere(new Vector3(0, 0.45f, 0), new Vector3(0.21f, 0.26f, 0.21f), 0, new Color(1f, 0.82f, 0.4f, 0.5f));
+                for (int i = 0; i < 3; i++)   // prongs holding the orb
+                {
+                    float a = 2 * Mathf.PI * i / 3;
+                    var d = new Vector3(Mathf.Cos(a), 0, Mathf.Sin(a));
+                    mb.Tube(d * 0.12f + Vector3.up * 0.2f, d * 0.2f + Vector3.up * 0.5f, 0.025f, 0.015f, 5, new Color(0.85f, 0.65f, 0.15f));
+                }
                 break;
         }
         return mb.ToMesh($"S3 {b.kind}");
@@ -965,6 +1284,31 @@ public static class S3Scenery
     }
 
     // ------------------------------------------------------------------ golf props (local meshes)
+
+    /// <summary>
+    /// A column of light fading upwards with a ring at its foot (additive glow material): marks where a ball hit
+    /// straight over the pole comes down, its antipode.
+    /// </summary>
+    public static Mesh BeaconMesh()
+    {
+        var mb = new MeshBuilder(0.5f);
+        const int n = 10;
+        const float H = 7f;
+        for (int i = 0; i < n; i++)
+        {
+            float u0 = (float)i / n, u1 = (float)(i + 1) / n;
+            mb.Frustum(new Vector3(0, H * u0, 0), Mathf.Lerp(0.2f, 0.06f, u0), Mathf.Lerp(0.2f, 0.06f, u1), H / n, 10,
+                       new Color(0.55f, 0.9f, 1f, 0.55f * (1 - u0) * (1 - u0)));
+        }
+        const int seg = 32;
+        for (int i = 0; i < seg; i++)
+        {
+            float a0 = 2 * Mathf.PI * i / seg, a1 = 2 * Mathf.PI * (i + 1) / seg;
+            Vector3 D(float a, float r) => new Vector3(Mathf.Cos(a) * r, 0.04f, Mathf.Sin(a) * r);
+            mb.Quad(D(a0, 0.62f), D(a1, 0.62f), D(a1, 0.74f), D(a0, 0.74f), new Color(0.55f, 0.9f, 1f, 0.7f));
+        }
+        return mb.ToMesh("S3 Beacon");
+    }
 
     public static Mesh FlagMesh()
     {

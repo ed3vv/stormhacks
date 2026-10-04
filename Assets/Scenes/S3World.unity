@@ -427,7 +427,7 @@ MonoBehaviour:
     sunColor: {r: 0.52, g: 0.49, b: 0.42, a: 1}
     skyAmbient: {r: 0.68, g: 0.72, b: 0.78, a: 1}
     groundAmbient: {r: 0.48, g: 0.5, b: 0.4, a: 1}
-    haze: {r: 0.82, g: 0.9, b: 0.96, a: 0.22}
+    haze: {r: 0.82, g: 0.9, b: 0.96, a: 0.14}
     shadowTint: {r: 0.55, g: 0.62, b: 0.6, a: 1}
     shadowStrength: 0.55
   desertStyle:
@@ -435,7 +435,7 @@ MonoBehaviour:
     sunColor: {r: 0.78, g: 0.58, b: 0.36, a: 1}
     skyAmbient: {r: 0.62, g: 0.52, b: 0.56, a: 1}
     groundAmbient: {r: 0.62, g: 0.46, b: 0.34, a: 1}
-    haze: {r: 0.97, g: 0.8, b: 0.7, a: 0.5}
+    haze: {r: 0.97, g: 0.8, b: 0.7, a: 0.32}
     shadowTint: {r: 0.62, g: 0.52, b: 0.62, a: 1}
     shadowStrength: 0.6
   basinStyle:
@@ -443,7 +443,7 @@ MonoBehaviour:
     sunColor: {r: 0.42, g: 0.38, b: 0.34, a: 1}
     skyAmbient: {r: 0.66, g: 0.74, b: 0.88, a: 1}
     groundAmbient: {r: 0.72, g: 0.78, b: 0.88, a: 1}
-    haze: {r: 0.86, g: 0.92, b: 1, a: 0.4}
+    haze: {r: 0.86, g: 0.92, b: 1, a: 0.16}
     shadowTint: {r: 0.55, g: 0.65, b: 0.85, a: 1}
     shadowStrength: 0.5
   nearClip: 0.004
@@ -484,30 +484,45 @@ MonoBehaviour:
     par: 5
   basinLocks:
   - template: 5
-    x: 5
-    z: 2
-    yaw: 240
+    x: 3
+    z: 1.5
+    yaw: 255
     mirror: 0
+    variant: 0
   - template: 6
-    x: -3.13
-    z: 4.04
-    yaw: 240
-    mirror: 1
-  - template: 7
-    x: 4.92
-    z: -13.16
-    yaw: 195
-    mirror: 1
-  - template: 8
-    x: -2.05
-    z: 8.85
-    yaw: 150
+    x: -4.13
+    z: -4.46
+    yaw: 300
     mirror: 0
+    variant: 2
+  - template: 7
+    x: 8.92
+    z: -14.66
+    yaw: 75
+    mirror: 0
+    variant: 1
+  - template: 8
+    x: -15.05
+    z: 0.85
+    yaw: 30
+    mirror: 0
+    variant: 0
   - template: 9
-    x: -16.18
-    z: -12.35
-    yaw: 270
-    mirror: 1
+    x: -12.68
+    z: -15.35
+    yaw: 240
+    mirror: 0
+    variant: 1
+  basinFences:
+  - hole: 1
+    radius: 4.4
+    halfSpan: 115
+  - hole: 2
+    radius: 4.4
+    halfSpan: 115
+  - hole: 4
+    radius: 4.4
+    halfSpan: 125
   basinLake: {x: 0, y: 17.5, z: 6.8}
   barrierRadius: 3.1
 --- !u!4 &2128898970
