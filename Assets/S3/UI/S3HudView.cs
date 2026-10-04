@@ -578,7 +578,7 @@ public class S3HudView : MonoBehaviour
     }
 
     /// <summary>
-    /// The title screen, over the world turning as a glass ball: "Antipode" on the big gold ribbon, flanked by
+    /// The title screen, over the world turning as a glass ball: "Antipolf" on the big gold ribbon, flanked by
     /// the pole rings (the marker for a shot's antipode), a tagline, then Play and Level select.
     /// </summary>
     public void ShowTitle(Action play, Action levels)
@@ -589,7 +589,7 @@ public class S3HudView : MonoBehaviour
         var ribbon = With(new Ribbon(), "title-ribbon");
         var row = With(new VisualElement(), "row title-row");
         row.Add(With(new ShapeIcon(S3Shape.Ring), "title-ring"));
-        row.Add(L("Antipode", "display title-name"));
+        row.Add(L("Antipolf", "display title-name"));
         row.Add(With(new ShapeIcon(S3Shape.Ring), "title-ring"));
         ribbon.Add(row);
         box.Add(ribbon);
