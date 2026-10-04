@@ -70,6 +70,16 @@ public class S3Puzzle
 
     public int Count(Kind k) => k == Kind.Mirror ? mirrorsLeft : diffractorsLeft;
     public Block Goal => blocks.Find(b => b.kind == Kind.Goal);
+
+    /// <summary>The crystals the light isn't reaching yet (some locks have two).</summary>
+    public IEnumerable<Block> UnlitGoals
+    {
+        get
+        {
+            for (int i = 0; i < blocks.Count; i++)
+                if (blocks[i].kind == Kind.Goal && !light.litGoals.Contains(i)) yield return blocks[i];
+        }
+    }
     public List<Block> Obstacles => obstacles;
 
     // ------------------------------------------------------------------ level flow
@@ -349,9 +359,9 @@ public class S3Puzzle
             if (flash != null && Time.realtimeSinceStartup < flashUntil && flash.Length > 0) return flash;
             if (HologramSolves) return "✦ Put it down here and the crystal lights up";
             var goal = Goal;
-            if (goal == null || Solved) return "";
-            string text = $"Crystal: you {S3.Dist(player.Foot, goal.position) * R:0.0} m";
-            if (ghost != null) text += $"  ·  placement {S3.Dist(ghost.position, goal.position) * R:0.0} m";
+            // your own distance to the crystal is on its waypoint
+            if (goal == null || Solved || ghost == null) return "";
+            string text = $"Piece to crystal {S3.Dist(ghost.position, goal.position) * R:0.0} m";
             if (Level != null && Level.diffractors > 0) text += $"  ·  antipode {Mathf.PI * R:0.0} m";
             return text;
         }

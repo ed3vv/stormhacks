@@ -4,8 +4,8 @@ Desert 2 The Long Way Round: solution lights the crystal, start unsolved
 Desert 3 Antipode: solution lights the crystal, start unsolved
 Desert 4 Zigzag: solution lights the crystal, start unsolved
 Desert 5 Full Circle: solution lights the crystal, start unsolved
-Basin 1 Reflection: solution lights the crystal, start unsolved, hole 12.2 m, crystal 6.0 m from cup, light ≥6.0 m from cup / ≥2.9 m from tee (unsolved ≥2.9), pieces ≥6.0 / ≥2.9 m, furthest piece 6.9 m from tee
-Basin 2 The Long Way Round: solution lights the crystal, start unsolved, hole 21.8 m, crystal 6.4 m from cup, light ≥5.3 m from cup / ≥6.6 m from tee (unsolved ≥6.7), pieces ≥5.7 / ≥8.2 m, furthest piece 10.9 m from tee
-Basin 3 Zigzag: solution lights the crystal, start unsolved, hole 15.7 m, crystal 6.3 m from cup, light ≥5.5 m from cup / ≥4.7 m from tee (unsolved ≥8.8), pieces ≥5.5 / ≥5.1 m, furthest piece 9.8 m from tee
-Basin 4 Antipode: solution lights the crystal, start unsolved, hole 31.0 m, crystal 6.5 m from cup, light ≥5.5 m from cup / ≥2.7 m from tee (unsolved ≥2.7), pieces ≥5.5 / ≥13.2 m, furthest piece 13.2 m from tee
-Basin 5 Full Circle: solution lights the crystal, start unsolved, hole 37.7 m, crystal 6.5 m from cup, light ≥5.5 m from cup / ≥2.6 m from tee (unsolved ≥10.9), pieces ≥5.5 / ≥6.5 m, furthest piece 25.8 m from tee
+Basin 1 Frozen Mirror: solution lights the crystal, start unsolved, hole 14.3 m, crystal 6.2 m from cup, light ≥5.5 m from cup / ≥3.0 m from tee (unsolved ≥3.0), pieces ≥5.5 / ≥3.0 m, furthest piece 3.0 m from tee
+Basin 2 Prism: solution lights the crystal, start unsolved, hole 21.0 m, crystal 6.5 m from cup, light ≥6.5 m from cup / ≥3.6 m from tee (unsolved ≥8.5), pieces ≥6.5 / ≥3.6 m, furthest piece 8.7 m from tee
+Basin 3 Twin Beams: solution lights the crystal, start unsolved, hole 25.0 m, crystal 6.4 m from cup, light ≥5.5 m from cup / ≥6.1 m from tee (unsolved ≥10.0), pieces ≥5.5 / ≥6.1 m, furthest piece 15.8 m from tee
+Basin 4 Homecoming: solution lights the crystal, start unsolved, hole 37.7 m, crystal 6.5 m from cup, light ≥4.6 m from cup / ≥3.0 m from tee (unsolved ≥3.1), pieces ≥5.7 / ≥6.5 m, furthest piece 6.5 m from tee
+Basin 5 Frozen Relay: solution lights the crystal, start unsolved, hole 30.0 m, crystal 6.4 m from cup, light ≥5.5 m from cup / ≥17.6 m from tee (unsolved ≥16.0), pieces ≥5.5 / ≥17.6 m, furthest piece 21.2 m from tee

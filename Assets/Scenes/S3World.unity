@@ -464,46 +464,46 @@ MonoBehaviour:
   greenRadius: 3.5
   puzzleFrame: {x: 0, y: 0, z: 0}
   basinCourse:
-  - tee: {x: 0, y: -5}
-    cup: {x: -2.5, y: 7}
+  - tee: {x: 0, y: -4}
+    cup: {x: 6, y: 9}
     par: 3
-  - tee: {x: -5.5, y: 6.5}
-    cup: {x: 3, y: 28.5}
+  - tee: {x: 4.56, y: 5.69}
+    cup: {x: -13.13, y: -5.96}
     par: 4
-  - tee: {x: 6, y: 27}
-    cup: {x: 15, y: 6}
+  - tee: {x: -9.49, y: -7.66}
+    cup: {x: 20.92, y: -13.16}
     par: 4
-  - tee: {x: 17.5, y: 3}
-    cup: {x: -25.17, y: 4.19}
+  - tee: {x: 16.44, y: -20.63}
+    cup: {x: -7.05, y: 8.85}
     par: 5
-  - tee: {x: -22.5, y: 2.5}
-    cup: {x: 14.97, y: -1.66}
+  - tee: {x: -4.91, y: 5.96}
+    cup: {x: -11.18, y: -27.35}
     par: 5
   basinLocks:
-  - template: 0
-    x: 7.5
-    z: -2
-    yaw: 270
+  - template: 5
+    x: 5
+    z: 2
+    yaw: 240
     mirror: 0
-  - template: 1
-    x: -12
-    z: 14.5
-    yaw: 30
+  - template: 6
+    x: -3.13
+    z: 4.04
+    yaw: 240
     mirror: 1
-  - template: 3
-    x: 20
-    z: 22
-    yaw: 180
+  - template: 7
+    x: 4.92
+    z: -13.16
+    yaw: 195
+    mirror: 1
+  - template: 8
+    x: -2.05
+    z: 8.85
+    yaw: 150
     mirror: 0
-  - template: 2
-    x: -34.17
-    z: -4.81
-    yaw: 15
-    mirror: 0
-  - template: 4
-    x: 4.97
-    z: 3.34
-    yaw: 165
+  - template: 9
+    x: -16.18
+    z: -12.35
+    yaw: 270
     mirror: 1
   basinLake: {x: 0, y: 17.5, z: 6.8}
   barrierRadius: 3.1

@@ -27,6 +27,8 @@ public class S3Player : MonoBehaviour
 
     /// <summary>False while something else (the golf ball camera) is driving the view.</summary>
     [System.NonSerialized] public bool inputEnabled = true;
+    /// <summary>True while a menu is open: no looking, walking or capturing the mouse.</summary>
+    [System.NonSerialized] public bool paused;
     /// <summary>Optional last word on the view, e.g. the golf flight camera.</summary>
     public System.Func<Matrix4x4, Matrix4x4> cameraFilter;
     /// <summary>Optional: is this ground point blocked (by laser puzzle pieces)?</summary>
@@ -53,6 +55,7 @@ public class S3Player : MonoBehaviour
 
     void Update()
     {
+        if (paused) return;
         var kb = Keyboard.current;
         var mouse = Mouse.current;
         float dt = Time.deltaTime;

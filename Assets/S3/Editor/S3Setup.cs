@@ -165,7 +165,7 @@ public static class S3Setup
         return mat;
     }
 
-    /// <summary>look: 0 meadow, 1 desert, 2 aurora basin.</summary>
+    /// <summary>look: 0 meadow, 1 desert, 2 eternal poles.</summary>
     static VolumeProfile PostProfile(string path, int look)
     {
         bool desert = look == 1, basin = look == 2;
@@ -207,7 +207,7 @@ public static class S3Setup
         vignette.color.Override(desert ? new Color(0.32f, 0.14f, 0.1f) : new Color(0.05f, 0.1f, 0.08f));
         if (basin)
         {
-            // polar day: cool, bright snow, bloom for the aurora and the lasers
+            // polar day: cool, bright snow, bloom for the ice and the lasers
             bloom.threshold.Override(0.85f);
             bloom.intensity.Override(0.7f);
             bloom.tint.Override(new Color(0.85f, 0.95f, 1f));
@@ -303,7 +303,7 @@ public static class S3Setup
         }
         player.cameraFilter = ballCamera;
 
-        // the aurora basin
+        // the eternal poles
         world.SetBiome(S3World.Biome.Basin);
         golf.Init();
         player.ApplyCamera();
@@ -511,7 +511,7 @@ public static class S3Setup
     /// light at least 4 m from the cup and 2 m from the tee, the pieces clear of both. Prints the best
     /// LockDef per hole (shortest walk from the tee).
     /// </summary>
-    public static string SearchLocks()
+    public static string SearchLocks(int only = -1)
     {
         var world = Object.FindAnyObjectByType<S3World>();
         var original = world.biome;
@@ -520,6 +520,7 @@ public static class S3Setup
         var log = new StringBuilder();
         for (int i = 0; i < world.holes.Count && i < world.basinLocks.Length; i++)
         {
+            if (only >= 0 && i != only) continue;
             var h = world.holes[i];
             var template = world.basinLocks[i].template;
             var gate = S3Puzzle.GateWalls(h.cup, world.barrierRadius - 0.45f, 12, R);
@@ -562,6 +563,86 @@ public static class S3Setup
                             }
                         }
             log.AppendLine($"hole {i + 1} {template}: new LockDef(S3Levels.Template.{template}, {bestDef.x}f, {bestDef.z}f, {bestDef.yaw}, {(bestDef.mirror ? "true" : "false")}), // {bestReport}");
+        }
+        world.SetBiome(original);
+        Debug.Log(log.ToString());
+        return log.ToString();
+    }
+
+    /// <summary>
+    /// Every place along the light a single mirror could stand (sampled every spacing metres, turned
+    /// in angleStep-degree steps) where it would light every goal. Used to check a lock can't be
+    /// short-cut with fewer pieces than intended.
+    /// </summary>
+    public static List<Vector4> OneMirrorSolutions(List<S3Laser.Block> blocks, List<S3Laser.Block> obstacles, float R,
+                                                   float spacing = 0.2f, float angleStep = 1.5f)
+    {
+        var found = new List<Vector4>();
+        var sim = new S3Laser.Simulation(blocks, obstacles);
+        foreach (var s in sim.segments)
+        {
+            if (s.diffracted) continue;
+            float len = Mathf.Min(s.length, S3Laser.Tau);
+            int n = Mathf.CeilToInt(len * R / spacing);
+            for (int k = 1; k < n; k++)
+            {
+                float t = len * k / n;
+                Vector4 p = S3Laser.PointAt(s.start, s.dir, t);
+                if (Mathf.Abs(p.y) > 1e-4f) continue;   // only beams along the ground can be caught
+                Vector4 dir = S3Laser.TangentAt(s.start, s.dir, t);
+                p = S3.Foot(p);
+                for (float a = 0; a < 180; a += angleStep)
+                {
+                    var m = S3Laser.Block.Mirror(p, S3Laser.Turn(S3.Ortho(dir, p, S3.EY), p, a * Mathf.Deg2Rad), R);
+                    if (blocks.Exists(b => m.FootprintOverlaps(b, 0)) || obstacles.Exists(b => m.FootprintOverlaps(b, 0))) continue;
+                    var scene = new List<S3Laser.Block>(blocks) { m };
+                    if (new S3Laser.Simulation(scene, obstacles).LightsAllGoals(scene)) { found.Add(p); break; }
+                }
+            }
+        }
+        return found;
+    }
+
+    /// <summary>
+    /// Shortcut check for the Eternal Poles' locks (gate and scenery in place): Frozen Mirror can't be
+    /// lit without its frozen mirror, Twin Beams and Frozen Relay need both mirrors, and Homecoming's one
+    /// mirror only works at the crystal's antipode.
+    /// </summary>
+    public static string TestShortcuts(int only = -1)
+    {
+        var world = Object.FindAnyObjectByType<S3World>();
+        var original = world.biome;
+        world.SetBiome(S3World.Biome.Basin);
+        float R = world.radius;
+        var scenery = SceneryBlocks(world);
+        var log = new StringBuilder();
+        for (int i = 0; i < world.levels.Count; i++)
+        {
+            if (only >= 0 && i != only) continue;
+            var level = world.levels[i];
+            var blocks = new List<S3Laser.Block>(level.blocks);
+            blocks.AddRange(S3Puzzle.GateWalls(world.holes[i].cup, world.barrierRadius - 0.45f, 12, R));
+            var template = world.basinLocks[i].template;
+            string verdict;
+            if (template == S3Levels.Template.FrozenMirror)
+            {
+                var withoutFrozen = blocks.Where(b => b.movable || b.kind != S3Laser.Kind.Mirror).ToList();
+                var cheats = OneMirrorSolutions(withoutFrozen, scenery, R);
+                verdict = cheats.Count == 0 ? "needs the frozen mirror" : $"SHORTCUT without the frozen mirror at {cheats.Count} spots, e.g. {world.GroundDistance(cheats[0], level.Goal.position):0.0} m from the crystal";
+            }
+            else if (template == S3Levels.Template.Homecoming)
+            {
+                var spots = OneMirrorSolutions(blocks, scenery, R);
+                var far = spots.Where(p => S3.Dist(p, -level.Goal.position) * R > 1.5f).ToList();
+                verdict = spots.Count == 0 ? "NO ONE-MIRROR SOLUTION FOUND" : far.Count == 0 ? $"one mirror works only at the antipode ({spots.Count} spots)" : $"SHORTCUT away from the antipode at {far.Count} spots";
+            }
+            else if (template == S3Levels.Template.TwinBeams || template == S3Levels.Template.FrozenRelay)
+            {
+                var cheats = OneMirrorSolutions(blocks, scenery, R);
+                verdict = cheats.Count == 0 ? "needs both mirrors" : $"SHORTCUT with one mirror at {cheats.Count} spots, e.g. {world.GroundDistance(cheats[0], level.Goal.position):0.0} m from the crystal";
+            }
+            else verdict = "no shortcut check";
+            log.AppendLine($"hole {i + 1} {level.title}: {verdict}");
         }
         world.SetBiome(original);
         Debug.Log(log.ToString());

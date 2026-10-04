@@ -45,7 +45,7 @@ Shader "S3/Object"
         float4 _S3Sun;            // fixed R^4 vector; its tangent part is the light direction
         float4 _S3SunColor, _S3SkyAmbient, _S3GroundAmbient;
         float4 _S3Haze;           // rgb haze colour, a = strength towards the antipode
-        float _S3Biome;           // 0 meadow, 1 desert, 2 aurora basin
+        float _S3Biome;           // 0 meadow, 1 desert, 2 eternal poles
         float4 _S3Patch[16];      // desert grass patches / basin lakes: centre on S^3
         float _S3PatchR[16];      // ... and radius in metres
         float _S3PatchCount;

@@ -301,7 +301,7 @@ public static class S3Scenery
         keep.Add(new KeepOut(frame.GetColumn(3), 1.2f * s));
     }
 
-    // ================================================================== aurora basin
+    // ================================================================== eternal poles
 
     static readonly Color Snow = new Color(0.94f, 0.96f, 0.99f);
     static readonly Color SnowShade = new Color(0.79f, 0.85f, 0.93f);
@@ -497,48 +497,6 @@ public static class S3Scenery
         }
     }
 
-    /// <summary>
-    /// Additive glow scenery: the Basin's aurora, curtains looped around the pole 7-13 m above a wavy
-    /// great circle of the ground (the pole is straight up from everywhere, so it is always overhead).
-    /// </summary>
-    public static MeshBuilder BuildGlow(S3World world)
-    {
-        if (world.biome != S3World.Biome.Basin) return null;
-        float R = world.radius;
-        var mb = new MeshBuilder();
-        Vector4 A = S3.GroundPoint(-13, 13, R), P2 = S3.GroundPoint(13, 14, R);
-        Vector4 B = S3.Ortho(P2, A);
-        Vector4 C = Vector4.zero;
-        foreach (var e in new[] { S3.EX, S3.EZ, S3.EW })
-        {
-            Vector4 v = S3.Ortho(e, A, B);
-            if (v.sqrMagnitude > C.sqrMagnitude) C = v;
-        }
-        Vector4 U(float th) => (Mathf.Cos(th) * A + Mathf.Sin(th) * B + 0.16f * Mathf.Sin(3 * th) * C).normalized;
-        float Wob(float th) => 1.2f * Mathf.Sin(th * 7) + 0.6f * Mathf.Sin(th * 13 + 1);
-        var bands = new (float h0, float h1, Color c, float a)[]
-        {
-            (7f, 8.6f, new Color(0.25f, 0.89f, 0.61f), 0.66f),
-            (8.6f, 10.4f, new Color(0.27f, 0.84f, 0.71f), 0.5f),
-            (10.4f, 12f, new Color(0.50f, 0.50f, 0.94f), 0.34f),
-            (12f, 13.2f, new Color(0.63f, 0.44f, 0.94f), 0.16f),
-        };
-        const int steps = 260;
-        for (int i = 0; i < steps; i++)
-        {
-            float t0 = 2 * Mathf.PI * i / steps, t1 = 2 * Mathf.PI * (i + 1) / steps;
-            Vector4 f0 = U(t0), f1 = U(t1);
-            float flick = 0.65f + 0.35f * Mathf.Sin(i * 0.9f) * Mathf.Sin(i * 0.23f);
-            foreach (var (h0, h1, c, a) in bands)
-            {
-                var col = new Color(c.r, c.g, c.b, a * flick);
-                mb.QuadS3(S3.Lift(f0, (h0 + Wob(t0)) / R), S3.Lift(f1, (h0 + Wob(t1)) / R),
-                          S3.Lift(f1, (h1 + Wob(t1)) / R), S3.Lift(f0, (h1 + Wob(t0)) / R), col, R);
-            }
-        }
-        return mb;
-    }
-
     /// <summary>The ice barrier over a sealed cup: a glowing hemisphere with brighter ribs, in local metres.</summary>
     public static Mesh DomeMesh(float r)
     {
@@ -612,8 +570,10 @@ public static class S3Scenery
 
             case S3Laser.Kind.Mirror:
             {
-                var frame = new Color(0.32f, 0.34f, 0.40f);
+                // a frozen (fixed) mirror has an ice frame and a cap of snow
+                var frame = b.movable ? new Color(0.32f, 0.34f, 0.40f) : IceRoof;
                 mb.OrientedBox(new Vector3(0, 0.73f, 0), Vector3.right, Vector3.up, Vector3.forward, new Vector3(hw - 0.06f, 0.53f, 0.025f), new Color(0.80f, 0.90f, 1f, 0.7f));
+                if (!b.movable) mb.Box(new Vector3(-hw - 0.05f, h, -0.09f), new Vector3(hw + 0.05f, h + 0.14f, 0.09f), Snow);
                 mb.Box(new Vector3(-hw, 0.12f, -0.05f), new Vector3(-hw + 0.07f, h, 0.05f), frame);
                 mb.Box(new Vector3(hw - 0.07f, 0.12f, -0.05f), new Vector3(hw, h, 0.05f), frame);
                 mb.Box(new Vector3(-hw, h - 0.07f, -0.05f), new Vector3(hw, h, 0.05f), frame);
@@ -1035,6 +995,46 @@ public static class S3Scenery
             mb.Icosphere(new Vector3(0, 0, ballRadius + 0.2f + 0.32f * k), Vector3.one * (0.06f - 0.003f * k), 1, col);
         }
         return mb.ToMesh("S3 Guide");
+    }
+
+    /// <summary>A flat ring lying on the ground around local origin; resize it with <see cref="SetRing"/>.</summary>
+    public static Mesh RingMesh(int segments, Color col)
+    {
+        var m = new Mesh { name = "S3 Ring" };
+        var normals = new List<Vector3>();
+        var colors = new List<Color>();
+        var tris = new List<int>();
+        for (int i = 0; i < segments; i++)
+        {
+            normals.Add(Vector3.up); normals.Add(Vector3.up);
+            colors.Add(col); colors.Add(col);
+            int a = 2 * i, b = 2 * ((i + 1) % segments);
+            tris.AddRange(new[] { a, b, a + 1, a + 1, b, b + 1 });
+        }
+        SetRing(m, 1, 0.1f, segments);
+        m.SetNormals(normals);
+        m.SetColors(colors);
+        m.SetTriangles(tris, 0, false);
+        m.bounds = new Bounds(Vector3.zero, Vector3.one * 100000f);   // S^3 coordinates: never cull
+        return m;
+    }
+
+    static readonly List<Vector3> ringVerts = new List<Vector3>();
+
+    /// <summary>Rewrites a <see cref="RingMesh"/>'s vertices for a new radius and width (metres).</summary>
+    public static void SetRing(Mesh m, float radius, float width, int segments = -1)
+    {
+        if (segments < 0) segments = m.vertexCount / 2;
+        ringVerts.Clear();
+        float r0 = Mathf.Max(radius - width / 2, 0), r1 = radius + width / 2;
+        for (int i = 0; i < segments; i++)
+        {
+            float a = 2 * Mathf.PI * i / segments;
+            var d = new Vector3(Mathf.Cos(a), 0, Mathf.Sin(a));
+            ringVerts.Add(d * r0 + Vector3.up * 0.03f);
+            ringVerts.Add(d * r1 + Vector3.up * 0.03f);
+        }
+        m.SetVertices(ringVerts, 0, ringVerts.Count, UnityEngine.Rendering.MeshUpdateFlags.DontRecalculateBounds);
     }
 
     /// <summary>Flat aiming arrow lying on the ground along +z, starting just past the ball.</summary>
