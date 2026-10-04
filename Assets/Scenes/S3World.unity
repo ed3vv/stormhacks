@@ -119,7 +119,7 @@ NavMeshSettings:
     debug:
       m_Flags: 0
   m_NavMeshData: {fileID: 0}
---- !u!1 &1503383874
+--- !u!1 &1163941607
 GameObject:
   m_ObjectHideFlags: 0
   m_CorrespondingSourceObject: {fileID: 0}
@@ -127,117 +127,11 @@ GameObject:
   m_PrefabAsset: {fileID: 0}
   serializedVersion: 6
   m_Component:
-  - component: {fileID: 1503383877}
-  - component: {fileID: 1503383876}
-  - component: {fileID: 1503383875}
-  m_Layer: 0
-  m_Name: S3 World
-  m_TagString: Untagged
-  m_Icon: {fileID: 0}
-  m_NavMeshLayer: 0
-  m_StaticEditorFlags: 0
-  m_IsActive: 1
---- !u!114 &1503383875
-MonoBehaviour:
-  m_ObjectHideFlags: 0
-  m_CorrespondingSourceObject: {fileID: 0}
-  m_PrefabInstance: {fileID: 0}
-  m_PrefabAsset: {fileID: 0}
-  m_GameObject: {fileID: 1503383874}
-  m_Enabled: 1
-  m_EditorHideFlags: 0
-  m_Script: {fileID: 11500000, guid: e84256bfb99b12344a032a0e64bbf1fd, type: 3}
-  m_Name: 
-  m_EditorClassIdentifier: Assembly-CSharp::S3Golf
-  player: {fileID: 1605432592}
-  ballRadius: 0.1
-  fairwayFriction: 1.7
-  greenFriction: 0.85
-  sinkSpeed: 3.5
-  reach: 2.6
-  clubs:
-  - name: Driver
-    maxSpeed: 21.5
-    aimable: 1
-  - name: Iron
-    maxSpeed: 14
-    aimable: 1
-  - name: Putter
-    maxSpeed: 8
-    aimable: 0
-  minAngle: 2
-  maxAngle: 90
-  startAngle: 20
-  aimDegreesPerPixel: 0.12
-  leash: 4.5
-  followMinHeight: 1.2
-  followTriggerHeight: 2.5
---- !u!114 &1503383876
-MonoBehaviour:
-  m_ObjectHideFlags: 0
-  m_CorrespondingSourceObject: {fileID: 0}
-  m_PrefabInstance: {fileID: 0}
-  m_PrefabAsset: {fileID: 0}
-  m_GameObject: {fileID: 1503383874}
-  m_Enabled: 1
-  m_EditorHideFlags: 0
-  m_Script: {fileID: 11500000, guid: 44be3c7d711b62042baf0628a0fdcca5, type: 3}
-  m_Name: 
-  m_EditorClassIdentifier: Assembly-CSharp::S3World
-  radius: 12
-  seed: 11
-  objectMaterial: {fileID: 2100000, guid: 4e0440b22f36a0444afe32e82e7979eb, type: 2}
-  groundMaterial: {fileID: 2100000, guid: c7c9124968a41294e894036802a60ba2, type: 2}
-  sun: {x: 0.55, y: 0.75, z: 0.35, w: 0.2}
-  ambient: 0.62
-  haze: {r: 0.82, g: 0.9, b: 0.96, a: 0.22}
-  nearClip: 0.004
-  course:
-  - tee: {x: 0, y: 3}
-    cup: {x: 0, y: 24}
-    par: 3
-  - tee: {x: 3, y: 27}
-    cup: {x: -22, y: 8}
-    par: 3
-  - tee: {x: -20, y: 6}
-    cup: {x: 16.1, y: -4.8}
-    par: 4
-  - tee: {x: 19, y: -6}
-    cup: {x: -2, y: -20}
-    par: 3
-  - tee: {x: -2, y: -24}
-    cup: {x: -3, y: -4}
-    par: 3
-  cupRadius: 0.18
-  greenRadius: 3.5
---- !u!4 &1503383877
-Transform:
-  m_ObjectHideFlags: 0
-  m_CorrespondingSourceObject: {fileID: 0}
-  m_PrefabInstance: {fileID: 0}
-  m_PrefabAsset: {fileID: 0}
-  m_GameObject: {fileID: 1503383874}
-  serializedVersion: 2
-  m_LocalRotation: {x: 0, y: 0, z: 0, w: 1}
-  m_LocalPosition: {x: 0, y: 0, z: 0}
-  m_LocalScale: {x: 1, y: 1, z: 1}
-  m_ConstrainProportionsScale: 0
-  m_Children: []
-  m_Father: {fileID: 0}
-  m_LocalEulerAnglesHint: {x: 0, y: 0, z: 0}
---- !u!1 &1605432591
-GameObject:
-  m_ObjectHideFlags: 0
-  m_CorrespondingSourceObject: {fileID: 0}
-  m_PrefabInstance: {fileID: 0}
-  m_PrefabAsset: {fileID: 0}
-  serializedVersion: 6
-  m_Component:
-  - component: {fileID: 1605432596}
-  - component: {fileID: 1605432595}
-  - component: {fileID: 1605432594}
-  - component: {fileID: 1605432593}
-  - component: {fileID: 1605432592}
+  - component: {fileID: 1163941612}
+  - component: {fileID: 1163941611}
+  - component: {fileID: 1163941610}
+  - component: {fileID: 1163941609}
+  - component: {fileID: 1163941608}
   m_Layer: 0
   m_Name: Main Camera
   m_TagString: MainCamera
@@ -245,13 +139,13 @@ GameObject:
   m_NavMeshLayer: 0
   m_StaticEditorFlags: 0
   m_IsActive: 1
---- !u!114 &1605432592
+--- !u!114 &1163941608
 MonoBehaviour:
   m_ObjectHideFlags: 0
   m_CorrespondingSourceObject: {fileID: 0}
   m_PrefabInstance: {fileID: 0}
   m_PrefabAsset: {fileID: 0}
-  m_GameObject: {fileID: 1605432591}
+  m_GameObject: {fileID: 1163941607}
   m_Enabled: 1
   m_EditorHideFlags: 0
   m_Script: {fileID: 11500000, guid: b427ff02c4d3be649a4da8a1c2b5f081, type: 3}
@@ -281,30 +175,30 @@ MonoBehaviour:
     e31: 0
     e32: 0
     e33: 1
-  pitch: -0.08
---- !u!81 &1605432593
+  pitch: -0.08726646
+--- !u!81 &1163941609
 AudioListener:
   m_ObjectHideFlags: 0
   m_CorrespondingSourceObject: {fileID: 0}
   m_PrefabInstance: {fileID: 0}
   m_PrefabAsset: {fileID: 0}
-  m_GameObject: {fileID: 1605432591}
+  m_GameObject: {fileID: 1163941607}
   m_Enabled: 1
---- !u!114 &1605432594
+--- !u!114 &1163941610
 MonoBehaviour:
   m_ObjectHideFlags: 0
   m_CorrespondingSourceObject: {fileID: 0}
   m_PrefabInstance: {fileID: 0}
   m_PrefabAsset: {fileID: 0}
-  m_GameObject: {fileID: 1605432591}
+  m_GameObject: {fileID: 1163941607}
   m_Enabled: 1
   m_EditorHideFlags: 0
   m_Script: {fileID: 11500000, guid: a79441f348de89743a2939f4d699eac1, type: 3}
   m_Name: 
   m_EditorClassIdentifier: Unity.RenderPipelines.Universal.Runtime::UnityEngine.Rendering.Universal.UniversalAdditionalCameraData
   m_RenderShadows: 0
-  m_RequiresDepthTextureOption: 2
-  m_RequiresOpaqueTextureOption: 2
+  m_RequiresDepthTextureOption: 0
+  m_RequiresOpaqueTextureOption: 0
   m_CameraType: 0
   m_Cameras: []
   m_RendererIndex: -1
@@ -313,8 +207,8 @@ MonoBehaviour:
     m_Bits: 1
   m_VolumeTrigger: {fileID: 0}
   m_VolumeFrameworkUpdateModeOption: 2
-  m_RenderPostProcessing: 0
-  m_Antialiasing: 0
+  m_RenderPostProcessing: 1
+  m_Antialiasing: 2
   m_AntialiasingQuality: 2
   m_StopNaN: 0
   m_Dithering: 0
@@ -334,13 +228,13 @@ MonoBehaviour:
     m_VarianceClampScale: 0.9
     m_ContrastAdaptiveSharpening: 0
   m_Version: 2
---- !u!20 &1605432595
+--- !u!20 &1163941611
 Camera:
   m_ObjectHideFlags: 0
   m_CorrespondingSourceObject: {fileID: 0}
   m_PrefabInstance: {fileID: 0}
   m_PrefabAsset: {fileID: 0}
-  m_GameObject: {fileID: 1605432591}
+  m_GameObject: {fileID: 1163941607}
   m_Enabled: 1
   serializedVersion: 2
   m_ClearFlags: 2
@@ -385,13 +279,241 @@ Camera:
   m_OcclusionCulling: 1
   m_StereoConvergence: 10
   m_StereoSeparation: 0.022
---- !u!4 &1605432596
+--- !u!4 &1163941612
 Transform:
   m_ObjectHideFlags: 0
   m_CorrespondingSourceObject: {fileID: 0}
   m_PrefabInstance: {fileID: 0}
   m_PrefabAsset: {fileID: 0}
-  m_GameObject: {fileID: 1605432591}
+  m_GameObject: {fileID: 1163941607}
+  serializedVersion: 2
+  m_LocalRotation: {x: 0, y: 0, z: 0, w: 1}
+  m_LocalPosition: {x: 0, y: 0, z: 0}
+  m_LocalScale: {x: 1, y: 1, z: 1}
+  m_ConstrainProportionsScale: 0
+  m_Children: []
+  m_Father: {fileID: 0}
+  m_LocalEulerAnglesHint: {x: 0, y: 0, z: 0}
+--- !u!1 &2122515625
+GameObject:
+  m_ObjectHideFlags: 0
+  m_CorrespondingSourceObject: {fileID: 0}
+  m_PrefabInstance: {fileID: 0}
+  m_PrefabAsset: {fileID: 0}
+  serializedVersion: 6
+  m_Component:
+  - component: {fileID: 2122515627}
+  - component: {fileID: 2122515626}
+  m_Layer: 0
+  m_Name: Post Volume
+  m_TagString: Untagged
+  m_Icon: {fileID: 0}
+  m_NavMeshLayer: 0
+  m_StaticEditorFlags: 0
+  m_IsActive: 1
+--- !u!114 &2122515626
+MonoBehaviour:
+  m_ObjectHideFlags: 0
+  m_CorrespondingSourceObject: {fileID: 0}
+  m_PrefabInstance: {fileID: 0}
+  m_PrefabAsset: {fileID: 0}
+  m_GameObject: {fileID: 2122515625}
+  m_Enabled: 1
+  m_EditorHideFlags: 0
+  m_Script: {fileID: 11500000, guid: 172515602e62fb746b5d573b38a5fe58, type: 3}
+  m_Name: 
+  m_EditorClassIdentifier: Unity.RenderPipelines.Core.Runtime::UnityEngine.Rendering.Volume
+  m_IsGlobal: 1
+  priority: 10
+  blendDistance: 0
+  weight: 1
+  sharedProfile: {fileID: 11400000, guid: 01c49fcf0b04b0942985e84b3fc6ee5a, type: 2}
+--- !u!4 &2122515627
+Transform:
+  m_ObjectHideFlags: 0
+  m_CorrespondingSourceObject: {fileID: 0}
+  m_PrefabInstance: {fileID: 0}
+  m_PrefabAsset: {fileID: 0}
+  m_GameObject: {fileID: 2122515625}
+  serializedVersion: 2
+  m_LocalRotation: {x: 0, y: 0, z: 0, w: 1}
+  m_LocalPosition: {x: 0, y: 0, z: 0}
+  m_LocalScale: {x: 1, y: 1, z: 1}
+  m_ConstrainProportionsScale: 0
+  m_Children: []
+  m_Father: {fileID: 0}
+  m_LocalEulerAnglesHint: {x: 0, y: 0, z: 0}
+--- !u!1 &2128898967
+GameObject:
+  m_ObjectHideFlags: 0
+  m_CorrespondingSourceObject: {fileID: 0}
+  m_PrefabInstance: {fileID: 0}
+  m_PrefabAsset: {fileID: 0}
+  serializedVersion: 6
+  m_Component:
+  - component: {fileID: 2128898970}
+  - component: {fileID: 2128898969}
+  - component: {fileID: 2128898968}
+  m_Layer: 0
+  m_Name: S3 World
+  m_TagString: Untagged
+  m_Icon: {fileID: 0}
+  m_NavMeshLayer: 0
+  m_StaticEditorFlags: 0
+  m_IsActive: 1
+--- !u!114 &2128898968
+MonoBehaviour:
+  m_ObjectHideFlags: 0
+  m_CorrespondingSourceObject: {fileID: 0}
+  m_PrefabInstance: {fileID: 0}
+  m_PrefabAsset: {fileID: 0}
+  m_GameObject: {fileID: 2128898967}
+  m_Enabled: 1
+  m_EditorHideFlags: 0
+  m_Script: {fileID: 11500000, guid: e84256bfb99b12344a032a0e64bbf1fd, type: 3}
+  m_Name: 
+  m_EditorClassIdentifier: Assembly-CSharp::S3Golf
+  player: {fileID: 1163941608}
+  ballRadius: 0.31
+  gravityUnits: 1.32
+  rollFrictionUnits: 0.54
+  bounceSpeedUnits: 0.14
+  restitution: 0.38
+  bounceGrip: 0.9
+  airDrag: 0.035
+  minAngle: 2
+  maxAngle: 90
+  startAngle: 24
+  aimDegreesPerSecond: 60
+  heightDegreesPerSecond: 35
+  fineAimFactor: 0.25
+  powerCycleRate: 3.2
+  reach: 2.5
+  cameraBack: 3.6
+  cameraHeight: 1.9
+  leash: 4.1
+  followMinHeight: 1
+  followTriggerHeight: 1
+  lookRate: 5
+  settleTime: 0.7
+--- !u!114 &2128898969
+MonoBehaviour:
+  m_ObjectHideFlags: 0
+  m_CorrespondingSourceObject: {fileID: 0}
+  m_PrefabInstance: {fileID: 0}
+  m_PrefabAsset: {fileID: 0}
+  m_GameObject: {fileID: 2128898967}
+  m_Enabled: 1
+  m_EditorHideFlags: 0
+  m_Script: {fileID: 11500000, guid: 44be3c7d711b62042baf0628a0fdcca5, type: 3}
+  m_Name: 
+  m_EditorClassIdentifier: Assembly-CSharp::S3World
+  biome: 0
+  radius: 12
+  seed: 11
+  objectMaterial: {fileID: 2100000, guid: 4e0440b22f36a0444afe32e82e7979eb, type: 2}
+  groundMaterial: {fileID: 2100000, guid: c7c9124968a41294e894036802a60ba2, type: 2}
+  beamMaterial: {fileID: 2100000, guid: 89534d3b30d989346b2e61cbfe9873c3, type: 2}
+  glowMaterial: {fileID: 2100000, guid: 8b141748df644294a9329d02fd4668f5, type: 2}
+  postVolume: {fileID: 2122515626}
+  meadowPost: {fileID: 11400000, guid: 01c49fcf0b04b0942985e84b3fc6ee5a, type: 2}
+  desertPost: {fileID: 11400000, guid: a5bce47b5bb47c64ba8b03ee080f14a9, type: 2}
+  basinPost: {fileID: 11400000, guid: bb7d4edc7715c464fa62477fb0fb3f01, type: 2}
+  meadowStyle:
+    sun: {x: 0.55, y: 0.75, z: 0.35, w: 0.2}
+    sunColor: {r: 0.52, g: 0.49, b: 0.42, a: 1}
+    skyAmbient: {r: 0.68, g: 0.72, b: 0.78, a: 1}
+    groundAmbient: {r: 0.48, g: 0.5, b: 0.4, a: 1}
+    haze: {r: 0.82, g: 0.9, b: 0.96, a: 0.22}
+    shadowTint: {r: 0.55, g: 0.62, b: 0.6, a: 1}
+    shadowStrength: 0.55
+  desertStyle:
+    sun: {x: 0.7, y: 0.45, z: 0.25, w: 0.45}
+    sunColor: {r: 0.78, g: 0.58, b: 0.36, a: 1}
+    skyAmbient: {r: 0.62, g: 0.52, b: 0.56, a: 1}
+    groundAmbient: {r: 0.62, g: 0.46, b: 0.34, a: 1}
+    haze: {r: 0.97, g: 0.8, b: 0.7, a: 0.5}
+    shadowTint: {r: 0.62, g: 0.52, b: 0.62, a: 1}
+    shadowStrength: 0.6
+  basinStyle:
+    sun: {x: 0.8, y: 0.35, z: 0.3, w: 0.4}
+    sunColor: {r: 0.42, g: 0.38, b: 0.34, a: 1}
+    skyAmbient: {r: 0.66, g: 0.74, b: 0.88, a: 1}
+    groundAmbient: {r: 0.72, g: 0.78, b: 0.88, a: 1}
+    haze: {r: 0.86, g: 0.92, b: 1, a: 0.4}
+    shadowTint: {r: 0.55, g: 0.65, b: 0.85, a: 1}
+    shadowStrength: 0.5
+  nearClip: 0.004
+  course:
+  - tee: {x: 0, y: 0}
+    cup: {x: 8, y: 32}
+    par: 4
+  - tee: {x: 7.3, y: 29.1}
+    cup: {x: -8.4, y: -14.9}
+    par: 4
+  - tee: {x: -5.4, y: -14}
+    cup: {x: 8.2, y: 21.2}
+    par: 5
+  - tee: {x: 3.3, y: 24}
+    cup: {x: 1.1, y: -9.4}
+    par: 4
+  - tee: {x: 2.7, y: -6.7}
+    cup: {x: -19, y: 12.1}
+    par: 4
+  cupRadius: 0.18
+  greenRadius: 3.5
+  puzzleFrame: {x: 0, y: 0, z: 0}
+  basinCourse:
+  - tee: {x: 0, y: -5}
+    cup: {x: -2.5, y: 7}
+    par: 3
+  - tee: {x: -5.5, y: 6.5}
+    cup: {x: 3, y: 28.5}
+    par: 4
+  - tee: {x: 6, y: 27}
+    cup: {x: 15, y: 6}
+    par: 4
+  - tee: {x: 17.5, y: 3}
+    cup: {x: -25.17, y: 4.19}
+    par: 5
+  - tee: {x: -22.5, y: 2.5}
+    cup: {x: 14.97, y: -1.66}
+    par: 5
+  basinLocks:
+  - template: 0
+    x: 7.5
+    z: -2
+    yaw: 270
+    mirror: 0
+  - template: 1
+    x: -12
+    z: 14.5
+    yaw: 30
+    mirror: 1
+  - template: 3
+    x: 20
+    z: 22
+    yaw: 180
+    mirror: 0
+  - template: 2
+    x: -34.17
+    z: -4.81
+    yaw: 15
+    mirror: 0
+  - template: 4
+    x: 4.97
+    z: 3.34
+    yaw: 165
+    mirror: 1
+  basinLake: {x: 0, y: 17.5, z: 6.8}
+  barrierRadius: 3.1
+--- !u!4 &2128898970
+Transform:
+  m_ObjectHideFlags: 0
+  m_CorrespondingSourceObject: {fileID: 0}
+  m_PrefabInstance: {fileID: 0}
+  m_PrefabAsset: {fileID: 0}
+  m_GameObject: {fileID: 2128898967}
   serializedVersion: 2
   m_LocalRotation: {x: 0, y: 0, z: 0, w: 1}
   m_LocalPosition: {x: 0, y: 0, z: 0}
@@ -404,5 +526,6 @@ Transform:
 SceneRoots:
   m_ObjectHideFlags: 0
   m_Roots:
-  - {fileID: 1605432596}
-  - {fileID: 1503383877}
+  - {fileID: 1163941612}
+  - {fileID: 2128898970}
+  - {fileID: 2122515627}

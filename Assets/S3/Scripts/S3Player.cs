@@ -25,10 +25,12 @@ public class S3Player : MonoBehaviour
     [HideInInspector] public float pitch = -0.08f;
     float jumpHeight, jumpVelocity;
 
-    /// <summary>While true, mouse Y is left to someone else (the golf aim sets pitch itself).</summary>
-    [System.NonSerialized] public bool externalPitch;
+    /// <summary>False while something else (the golf ball camera) is driving the view.</summary>
+    [System.NonSerialized] public bool inputEnabled = true;
     /// <summary>Optional last word on the view, e.g. the golf flight camera.</summary>
     public System.Func<Matrix4x4, Matrix4x4> cameraFilter;
+    /// <summary>Optional: is this ground point blocked (by laser puzzle pieces)?</summary>
+    public System.Func<Vector4, bool> blocked;
 
     /// <summary>Frame count on which the cursor was captured (that click shouldn't also swing).</summary>
     public int LockedOnFrame { get; private set; } = -1;
@@ -64,15 +66,16 @@ public class S3Player : MonoBehaviour
                 Cursor.visible = false;
                 LockedOnFrame = Time.frameCount;
             }
-            else if (locked)
+            else if (locked && inputEnabled)
             {
                 Vector2 d = mouse.delta.ReadValue();
                 Turn(d.x * lookSensitivity);
-                if (!externalPitch) pitch = Mathf.Clamp(pitch + d.y * lookSensitivity, -1.5f, 1.5f);
+                pitch = Mathf.Clamp(pitch + d.y * lookSensitivity, -1.5f, 1.5f);
             }
         }
         if (kb == null) return;
         if (kb.escapeKey.wasPressedThisFrame) { Cursor.lockState = CursorLockMode.None; Cursor.visible = true; }
+        if (!inputEnabled) return;
 
         float fwd = (kb.wKey.isPressed ? 1 : 0) - (kb.sKey.isPressed ? 1 : 0);
         float side = (kb.dKey.isPressed ? 1 : 0) - (kb.aKey.isPressed ? 1 : 0);
@@ -80,7 +83,17 @@ public class S3Player : MonoBehaviour
         {
             float speed = walkSpeed * (kb.leftShiftKey.isPressed ? runMultiplier : 1) * dt;
             float n = Mathf.Sqrt(fwd * fwd + side * side);
-            Move(side / n * speed, fwd / n * speed);
+            float dx = side / n * speed, dz = fwd / n * speed;
+            Matrix4x4 before = Ground;
+            Move(dx, dz);
+            // refuse to step into a blocker (puzzle pieces), sliding along it if possible,
+            // but always let the player out of one
+            if (blocked != null && blocked(Foot) && !blocked(before.GetColumn(3)))
+            {
+                Ground = before; Move(dx, 0);
+                if (blocked(Foot)) { Ground = before; Move(0, dz); }
+                if (blocked(Foot)) Ground = before;
+            }
         }
 
         if (jumpHeight <= 0 && kb.spaceKey.wasPressedThisFrame) jumpVelocity = jumpSpeed;

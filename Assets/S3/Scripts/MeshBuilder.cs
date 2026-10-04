@@ -14,6 +14,8 @@ public class MeshBuilder
     public readonly List<Vector3> normals = new List<Vector3>();
     public readonly List<Color> colors = new List<Color>();
     public readonly List<int> tris = new List<int>();
+    public readonly List<Vector4> props = new List<Vector4>();      // uv1: prop's foot on S^3 (wind phase)
+    public readonly List<Vector4> propInfo = new List<Vector4>();   // uv2: (see-through index, wind sway, 0, 0)
     public float maxEdge;
 
     public MeshBuilder(float maxEdge = 0.5f) { this.maxEdge = maxEdge; }
@@ -21,6 +23,7 @@ public class MeshBuilder
     int Add(Vector3 p, Vector3 n, Color c)
     {
         verts.Add(p); normals.Add(n); colors.Add(c);
+        props.Add(Vector4.zero); propInfo.Add(Vector4.zero);
         return verts.Count - 1;
     }
 
@@ -85,6 +88,28 @@ public class MeshBuilder
         Quad(P(0, 0, 1), P(1, 0, 1), P(1, 0, 0), P(0, 0, 0), col); // bottom
     }
 
+    /// <summary>Box with arbitrary orthonormal axes r, u, f around centre c, with half sizes along each.</summary>
+    public void OrientedBox(Vector3 c, Vector3 r, Vector3 u, Vector3 f, Vector3 half, Color col)
+    {
+        Vector3 P(int i, int j, int k) => c + r * (i == 0 ? -half.x : half.x) + u * (j == 0 ? -half.y : half.y) + f * (k == 0 ? -half.z : half.z);
+        Quad(P(0, 0, 0), P(1, 0, 0), P(1, 1, 0), P(0, 1, 0), col);
+        Quad(P(1, 0, 1), P(0, 0, 1), P(0, 1, 1), P(1, 1, 1), col);
+        Quad(P(0, 0, 1), P(0, 0, 0), P(0, 1, 0), P(0, 1, 1), col);
+        Quad(P(1, 0, 0), P(1, 0, 1), P(1, 1, 1), P(1, 1, 0), col);
+        Quad(P(0, 1, 0), P(1, 1, 0), P(1, 1, 1), P(0, 1, 1), col);
+        Quad(P(0, 0, 1), P(1, 0, 1), P(1, 0, 0), P(0, 0, 0), col);
+    }
+
+    /// <summary>Triangle a-b-c extruded by depth into a closed prism (gables, wedges).</summary>
+    public void Prism(Vector3 a, Vector3 b, Vector3 c, Vector3 depth, Color col)
+    {
+        Tri(a, b, c, col);
+        Tri(a + depth, b + depth, c + depth, col);
+        Quad(a, b, b + depth, a + depth, col);
+        Quad(b, c, c + depth, b + depth, col);
+        Quad(c, a, a + depth, c + depth, col);
+    }
+
     /// <summary>A thick plate: quad a-b-c-d extruded by thickness along its upward-facing normal.</summary>
     public void Slab(Vector3 a, Vector3 b, Vector3 c, Vector3 d, float thickness, Color col, Color edge)
     {
@@ -115,6 +140,42 @@ public class MeshBuilder
             }
             else Tri(baseCenter + d0 * baseRadius, baseCenter + d1 * baseRadius, top, col);
             Tri(baseCenter + d1 * baseRadius, baseCenter + d0 * baseRadius, baseCenter, col);
+        }
+    }
+
+    /// <summary>Tapered tube between two arbitrary points (palm trunks, beams), capped at the top.</summary>
+    public void Tube(Vector3 a, Vector3 b, float ra, float rb, int sides, Color col, float phase = 0)
+    {
+        Vector3 axis = (b - a).normalized;
+        Vector3 side = Vector3.Cross(axis, Mathf.Abs(axis.y) < 0.9f ? Vector3.up : Vector3.right).normalized;
+        Vector3 side2 = Vector3.Cross(axis, side);
+        for (int i = 0; i < sides; i++)
+        {
+            float a0 = phase + 2 * Mathf.PI * i / sides, a1 = phase + 2 * Mathf.PI * (i + 1) / sides;
+            Vector3 d0 = side * Mathf.Cos(a0) + side2 * Mathf.Sin(a0);
+            Vector3 d1 = side * Mathf.Cos(a1) + side2 * Mathf.Sin(a1);
+            Quad(a + d0 * ra, a + d1 * ra, b + d1 * rb, b + d0 * rb, col);
+            Tri(b + d0 * rb, b + d1 * rb, b, col);
+        }
+    }
+
+    /// <summary>
+    /// Flat arched opening (door / window) on a wall: a rectangle with a semicircular top, drawn
+    /// slightly in front of the wall. bottom is the centre of the sill; right and outward span the wall.
+    /// </summary>
+    public void Arch(Vector3 bottom, Vector3 right, Vector3 outward, float width, float height, Color col, float offset = 0.03f)
+    {
+        Vector3 up = Vector3.Cross(outward, right).normalized;
+        if (Vector3.Dot(up, Vector3.up) < 0) up = -up;
+        float hw = width / 2, rect = Mathf.Max(height - hw, 0.01f);
+        Vector3 o = bottom + outward * offset;
+        Quad(o - right * hw, o + right * hw, o + right * hw + up * rect, o - right * hw + up * rect, col);
+        Vector3 c = o + up * rect;
+        const int seg = 8;
+        for (int i = 0; i < seg; i++)
+        {
+            float a0 = Mathf.PI * i / seg, a1 = Mathf.PI * (i + 1) / seg;
+            Tri(c, c + (right * Mathf.Cos(a0) + up * Mathf.Sin(a0)) * hw, c + (right * Mathf.Cos(a1) + up * Mathf.Sin(a1)) * hw, col);
         }
     }
 
@@ -194,20 +255,47 @@ public class MeshBuilder
             }
     }
 
+    /// <summary>A small quad given directly by four points of S^3, stored in log-map coordinates (frame = identity).</summary>
+    public void QuadS3(Vector4 a, Vector4 b, Vector4 c, Vector4 d, Color col, float R)
+    {
+        int start = verts.Count;
+        foreach (var p in new[] { a, b, c, d })
+        {
+            S3.LogWithNormal(p, S3.UpAt(p), R, out Vector3 v, out Vector3 n);
+            Add(v, n, col);
+        }
+        tris.Add(start); tris.Add(start + 1); tris.Add(start + 2);
+        tris.Add(start); tris.Add(start + 2); tris.Add(start + 3);
+    }
+
     // ------------------------------------------------------------------ S^3 baking
 
     /// <summary>
     /// Places src onto S^3 at the given frame and appends it re-encoded as log-map coordinates
     /// around e_w, so many props can share one mesh drawn with the identity frame.
     /// </summary>
-    public void AppendBaked(MeshBuilder src, Matrix4x4 frame, float R)
+    /// <param name="fadeIndex">see-through slot from S3World.RegisterFadeProp (0 = never fades)</param>
+    /// <param name="sway">how much wind moves it (grass 1, foliage ~0.3, solid 0)</param>
+    /// <param name="occlusion">darken vertices near the ground (cheap baked ambient occlusion)</param>
+    public void AppendBaked(MeshBuilder src, Matrix4x4 frame, float R, int fadeIndex = 0, float sway = 0, float occlusion = 0.35f)
     {
         int offset = verts.Count;
+        Vector4 foot = frame.GetColumn(3);
+        var info = new Vector4(fadeIndex, sway, 0, 0);
         for (int i = 0; i < src.verts.Count; i++)
         {
-            S3.ExpWithNormal(src.verts[i], src.normals[i], R, out Vector4 p, out Vector4 n4);
+            Vector3 lv = src.verts[i];
+            S3.ExpWithNormal(lv, src.normals[i], R, out Vector4 p, out Vector4 n4);
             S3.LogWithNormal(frame * p, frame * n4, R, out Vector3 v, out Vector3 n);
-            Add(v, n, src.colors[i]);
+            Color c = src.colors[i];
+            if (occlusion > 0)
+            {
+                float k = 1 - occlusion * (1 - Mathf.Clamp01(lv.y / 1.4f));
+                c = new Color(c.r * k, c.g * k, c.b * k, c.a);
+            }
+            int idx = Add(v, n, c);
+            props[idx] = foot;
+            propInfo[idx] = info;
         }
         foreach (int t in src.tris) tris.Add(t + offset);
     }
@@ -219,6 +307,8 @@ public class MeshBuilder
         m.SetVertices(verts);
         m.SetNormals(normals);
         m.SetColors(colors);
+        m.SetUVs(1, props);
+        m.SetUVs(2, propInfo);
         m.SetTriangles(tris, 0, false);
         // Positions are S^3 coordinates, not Unity world space: never let Unity cull these.
         m.bounds = new Bounds(Vector3.zero, Vector3.one * 100000f);

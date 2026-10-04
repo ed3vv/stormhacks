@@ -1,0 +1,899 @@
+<title>Coral Cove &amp; Aurora Basin</title>
+<link rel="preconnect" href="https://fonts.googleapis.com">
+<link rel="preconnect" href="https://fonts.gstatic.com" crossorigin>
+<link rel="stylesheet" href="https://fonts.googleapis.com/css2?family=Bricolage+Grotesque:opsz,wght@12..96,500;12..96,700;12..96,800&family=Atkinson+Hyperlegible:ital,wght@0,400;0,700;1,400&family=JetBrains+Mono:wght@400;600&display=swap">
+<style>
+/* Layout: a concept board. Each world gets one wide live S^3 frame, then palette, twist, surfaces, props and light in a compact grid. */
+:root {
+  --bg: #edf1f3;
+  --panel: #ffffff;
+  --ink: #16202a;
+  --muted: #566572;
+  --line: #d2dbe1;
+  --beach: #d9502f;
+  --beach-soft: #fbe3d9;
+  --ice: #1f8fb8;
+  --ice-soft: #d9f0f8;
+  --code: #f4f7f9;
+  --display: "Bricolage Grotesque", "Segoe UI", system-ui, sans-serif;
+  --body: "Atkinson Hyperlegible", "Segoe UI", system-ui, sans-serif;
+  --mono: "JetBrains Mono", ui-monospace, "Cascadia Mono", Consolas, monospace;
+}
+@media (prefers-color-scheme: dark) {
+  :root:not([data-theme="light"]) {
+    --bg: #10161b; --panel: #172029; --ink: #e5edf2; --muted: #93a3b0; --line: #2a3742;
+    --beach: #ff7b58; --beach-soft: #3a2420; --ice: #6fd2f2; --ice-soft: #16323e; --code: #121a21;
+    color-scheme: dark;
+  }
+}
+:root[data-theme="dark"] {
+  --bg: #10161b; --panel: #172029; --ink: #e5edf2; --muted: #93a3b0; --line: #2a3742;
+  --beach: #ff7b58; --beach-soft: #3a2420; --ice: #6fd2f2; --ice-soft: #16323e; --code: #121a21;
+  color-scheme: dark;
+}
+* { box-sizing: border-box; }
+body { background: var(--bg); color: var(--ink); font: 16px/1.55 var(--body); }
+.wrap { max-width: 1180px; margin: 0 auto; padding-inline: 20px; padding-block: 36px 64px; display: grid; gap: 56px; }
+header { display: grid; gap: 14px; max-width: 72ch; }
+.eyebrow { font: 600 12px/1 var(--mono); letter-spacing: .12em; text-transform: uppercase; color: var(--muted); }
+h1 { font: 800 clamp(34px, 6vw, 62px)/1 var(--display); letter-spacing: -.02em; margin: 0; text-wrap: balance; }
+h1 .amp { color: var(--muted); font-weight: 500; }
+h2 { font: 800 clamp(28px, 4vw, 40px)/1.05 var(--display); margin: 0; letter-spacing: -.015em; text-wrap: balance; }
+h3 { font: 700 13px/1.2 var(--mono); letter-spacing: .1em; text-transform: uppercase; margin: 0 0 10px; color: var(--muted); }
+p { margin: 0; }
+.lede { font-size: 18px; color: var(--muted); }
+nav { display: flex; flex-wrap: wrap; gap: 8px; }
+nav a { font: 600 13px/1 var(--mono); color: var(--ink); text-decoration: none; padding: 9px 12px; border: 1px solid var(--line); border-radius: 999px; background: var(--panel); }
+nav a:hover, nav a:focus-visible { border-color: var(--ink); outline: none; }
+
+section.world { display: grid; gap: 22px; }
+.world-head { display: flex; flex-wrap: wrap; align-items: baseline; justify-content: space-between; gap: 8px 24px; }
+.world-head .tag { font: 600 13px/1.3 var(--mono); color: var(--muted); }
+.beach h2 { color: var(--beach); }
+.ice h2 { color: var(--ice); }
+.pitch { font-size: 18px; max-width: 70ch; }
+
+figure { margin: 0; display: grid; gap: 10px; }
+.stage { position: relative; width: 100%; max-width: 100%; aspect-ratio: 16 / 9; border-radius: 10px; overflow: hidden; background: #cfe3ea; cursor: grab; touch-action: none; }
+.stage:active { cursor: grabbing; }
+.stage canvas { width: 100%; height: 100%; display: block; }
+.controls { display: flex; flex-wrap: wrap; gap: 8px; align-items: center; justify-content: space-between; }
+.controls .btns { display: flex; flex-wrap: wrap; gap: 6px; }
+button { font: 600 13px/1 var(--mono); padding: 9px 12px; border-radius: 6px; border: 1px solid var(--line); background: var(--panel); color: var(--ink); cursor: pointer; }
+button:hover, button:focus-visible { border-color: var(--ink); outline: none; }
+figcaption { font-size: 14px; color: var(--muted); }
+
+.grid { display: grid; grid-template-columns: repeat(12, 1fr); gap: 16px; }
+.card { background: var(--panel); border: 1px solid var(--line); border-radius: 10px; padding: 18px; min-width: 0; }
+.span-4 { grid-column: span 4; } .span-5 { grid-column: span 5; } .span-6 { grid-column: span 6; } .span-7 { grid-column: span 7; } .span-8 { grid-column: span 8; } .span-12 { grid-column: span 12; }
+@media (max-width: 860px) { .span-4, .span-5, .span-6, .span-7, .span-8 { grid-column: span 12; } }
+
+.swatches { display: grid; grid-template-columns: repeat(auto-fill, minmax(96px, 1fr)); gap: 10px; }
+.sw { display: grid; gap: 6px; }
+.sw i { display: block; height: 44px; border-radius: 6px; border: 1px solid var(--line); }
+.sw b { font: 700 13px/1.2 var(--body); }
+.sw code { font: 12px/1 var(--mono); color: var(--muted); }
+
+.twist p + p { margin-top: 10px; }
+.callout { border-left: 3px solid currentColor; padding-left: 12px; }
+.beach .callout { color: var(--beach); } .ice .callout { color: var(--ice); }
+.callout span { color: var(--ink); }
+
+.tbl { overflow-x: auto; }
+table { border-collapse: collapse; width: 100%; font-size: 14px; }
+th, td { text-align: left; padding: 8px 10px; border-bottom: 1px solid var(--line); vertical-align: top; }
+th { font: 700 12px/1.2 var(--mono); letter-spacing: .06em; text-transform: uppercase; color: var(--muted); }
+td.num { font-family: var(--mono); font-variant-numeric: tabular-nums; white-space: nowrap; }
+.chip { display: inline-block; font: 600 11px/1 var(--mono); padding: 4px 7px; border-radius: 999px; background: var(--code); border: 1px solid var(--line); white-space: nowrap; }
+.chip.new { background: var(--beach-soft); border-color: transparent; }
+.ice .chip.new, .plan .chip.new { background: var(--ice-soft); }
+
+ul.props { list-style: none; padding: 0; margin: 0; columns: 2 220px; column-gap: 24px; }
+ul.props li { break-inside: avoid; padding: 6px 0; border-bottom: 1px dashed var(--line); font-size: 15px; }
+ul.props li b { font-weight: 700; }
+
+pre { margin: 0; background: var(--code); border: 1px solid var(--line); border-radius: 8px; padding: 14px; overflow-x: auto; font: 13px/1.55 var(--mono); }
+.dot { display: inline-block; width: 10px; height: 10px; border-radius: 2px; vertical-align: -1px; margin-right: 6px; border: 1px solid rgba(0,0,0,.15); }
+
+.holes { display: grid; gap: 12px; }
+.hole { display: grid; grid-template-columns: auto 1fr; gap: 4px 12px; }
+.hole .n { font: 800 22px/1 var(--display); color: var(--muted); grid-row: span 2; }
+.hole b { font-weight: 700; }
+.hole p { color: var(--muted); font-size: 15px; }
+
+.plan ol { margin: 0; padding-left: 20px; display: grid; gap: 8px; }
+.plan li::marker { font-family: var(--mono); color: var(--muted); }
+.foot { font-size: 14px; color: var(--muted); }
+@media (prefers-reduced-motion: reduce) { * { scroll-behavior: auto !important; } }
+</style>
+
+<div class="wrap">
+  <header>
+    <div class="eyebrow">S³ Golf · map concepts 3 &amp; 4</div>
+    <h1>Coral Cove <span class="amp">&amp;</span> Aurora Basin</h1>
+    <p class="lede">Two more maps for the 3-sphere course, alongside Meadow and Desert Oasis. Every frame below is drawn with the game's own S³ projection, so it is what the camera would actually see. The ground curves up into a bowl, things past a quarter lap grow as they recede, and whatever is overhead is the far side of the world.</p>
+    <nav aria-label="Sections">
+      <a href="#cove">Coral Cove (beach)</a>
+      <a href="#basin">Aurora Basin (ice)</a>
+      <a href="#compare">All four maps</a>
+      <a href="#plan">Build plan</a>
+    </nav>
+  </header>
+
+  <!-- ============================================================ BEACH -->
+  <section class="world beach" id="cove">
+    <div class="world-head">
+      <h2>Coral Cove</h2>
+      <span class="tag">beach · late-morning sun · ocean overhead</span>
+    </div>
+    <p class="pitch">A sandy cove wrapped around a turquoise sea. The ocean is a round cap of the ground sphere centred past the equator, so from the first tee the coastline sits mid-frame and the open sea hangs overhead. Palms, beach huts, a pier and a striped lighthouse frame the holes.</p>
+
+    <figure>
+      <div class="stage" id="stage-cove" role="img" aria-label="Coral Cove rendered in S³: a beach with palms, umbrella and sandcastle in front, the shoreline and a pier mid-frame, a lighthouse on rocks to the left, and the ocean rising overhead."><canvas></canvas></div>
+      <div class="controls">
+        <div class="btns">
+          <button type="button" id="cove-eye">Tee view</button>
+          <button type="button" id="cove-up">Look up</button>
+          <button type="button" id="cove-turn">Turn around</button>
+        </div>
+        <figcaption>Drag to look around. Tee of hole 1, camera 1.9 m up, world radius 12 m.</figcaption>
+      </div>
+    </figure>
+
+    <div class="grid">
+      <div class="card span-12">
+        <h3>Palette</h3>
+        <div class="swatches">
+          <div class="sw"><i style="background:#f2d6a2"></i><b>Dry sand</b><code>#F2D6A2</code></div>
+          <div class="sw"><i style="background:#c9a06e"></i><b>Wet sand</b><code>#C9A06E</code></div>
+          <div class="sw"><i style="background:#5fd3c6"></i><b>Shallows</b><code>#5FD3C6</code></div>
+          <div class="sw"><i style="background:#1d6ea8"></i><b>Deep water</b><code>#1D6EA8</code></div>
+          <div class="sw"><i style="background:#f6fbff"></i><b>Foam</b><code>#F6FBFF</code></div>
+          <div class="sw"><i style="background:#e8553d"></i><b>Lighthouse red</b><code>#E8553D</code></div>
+          <div class="sw"><i style="background:#4e9a3a"></i><b>Palm</b><code>#4E9A3A</code></div>
+          <div class="sw"><i style="background:#8fd3e8"></i><b>Hut blue</b><code>#8FD3E8</code></div>
+        </div>
+      </div>
+
+      <div class="card span-5 twist">
+        <h3>The S³ twist</h3>
+        <p class="callout"><span>Every hole has two routes: the short one over the water and the long one round the world on land.</span></p>
+        <p>On a 3-sphere the straight line from tee to cup keeps going and comes back. Hole 3 sits across the bay: carry the water for a birdie, or putt the other way round the 75 m circumference along the beach and never get wet.</p>
+        <p>Look straight up from any tee and you see the whole sea, because the ocean cap covers the antipode.</p>
+      </div>
+
+      <div class="card span-7">
+        <h3>Surfaces &amp; physics</h3>
+        <div class="tbl">
+          <table>
+            <thead><tr><th>Surface</th><th>Rolling</th><th>Bounce</th><th>Effect</th></tr></thead>
+            <tbody>
+              <tr><td>Dry sand</td><td class="num">× 2.2</td><td class="num">0.15</td><td>A bunker everywhere off the paths. The ball plugs, and full power drops to 75% from sand.</td></tr>
+              <tr><td>Wet sand</td><td class="num">× 0.9</td><td class="num">0.38</td><td>A fast lane along the shore; long putts can run the whole coast.</td></tr>
+              <tr><td>Grass greens</td><td class="num">× 0.8</td><td class="num">0.38</td><td>Dune-grass islands around each cup.</td></tr>
+              <tr><td>Boardwalk / pier</td><td class="num">× 0.7</td><td class="num">0.55</td><td>Raised planks: a bridge over the water, with lively bounces.</td></tr>
+              <tr><td>Ocean</td><td class="num">hazard</td><td class="num">–</td><td>Splash, +1 stroke, then the ball is dropped where it crossed the shoreline.</td></tr>
+            </tbody>
+          </table>
+        </div>
+      </div>
+
+      <div class="card span-7">
+        <h3>Props</h3>
+        <ul class="props">
+          <li><b>Lighthouse</b>: banded red and white on a rock point, with a glowing lamp that blooms</li>
+          <li><b>Pier</b>: plank boardwalk on posts running into the shallows</li>
+          <li><b>Beach huts</b>: pastel boxes with striped gable roofs</li>
+          <li><b>Palms</b>: reused from Desert Oasis, leaning toward the sea</li>
+          <li><b>Umbrellas &amp; towels</b>: striped cones, flat striped mats</li>
+          <li><b>Surfboards</b>: stuck upright in the sand in pairs</li>
+          <li><b>Sandcastles</b>: towers with cone roofs and a tiny flag</li>
+          <li><b>Rocks &amp; tide pools</b>: grey boulders where sand meets sea</li>
+          <li><b>Beach balls</b>: striped, light, and they block shots</li>
+          <li><b>Seagulls</b>: little V-shaped birds drifting 5–9 m up</li>
+        </ul>
+      </div>
+
+      <div class="card span-5">
+        <h3>Light <span class="chip">S3World.Style</span></h3>
+        <pre><span class="dot" style="background:#9e9480"></span>sunColor      (0.62, 0.58, 0.50)
+<span class="dot" style="background:#9eb0bd"></span>skyAmbient    (0.62, 0.74, 0.82)
+<span class="dot" style="background:#a89a80"></span>groundAmbient (0.66, 0.60, 0.50)
+<span class="dot" style="background:#d1eafa"></span>haze          (0.80, 0.92, 0.98, 0.30)
+<span class="dot" style="background:#8c9eb8"></span>shadowTint    (0.55, 0.62, 0.72)
+sun (R⁴)      (0.45, 0.85, 0.20, 0.25)  high, late morning
+post          bloom 0.4 · temp +4 · sat +16</pre>
+      </div>
+
+      <div class="card span-12">
+        <h3>Signature holes</h3>
+        <div class="holes">
+          <div class="hole"><span class="n">1</span><b>Pier Shot · par 3 · 14 m</b><p>Drive off the beach to a green at the root of the pier. Wet sand runs right up to it.</p></div>
+          <div class="hole"><span class="n">3</span><b>Across the Bay · par 4 · 18 m over water or 57 m round the world</b><p>The cup is on the far shore. Carry the sea, or roll the long way round the world on dry land.</p></div>
+          <div class="hole"><span class="n">5</span><b>Lighthouse Point · par 3 · 12 m</b><p>A rock-ringed green under the lighthouse. Bounces off the rocks can kick into the surf.</p></div>
+        </div>
+      </div>
+    </div>
+  </section>
+
+  <!-- ============================================================ ICE -->
+  <section class="world ice" id="basin">
+    <div class="world-head">
+      <h2>Aurora Basin</h2>
+      <span class="tag">ice · low pale sun · aurora at the pole</span>
+    </div>
+    <p class="pitch">A snowfield around a frozen lake, with snowy pines, crystal spires, an igloo and an ice castle. The aurora hangs in a loop 7–13 m up around the pole. The pole is straight up from every point on the ground, so the aurora is overhead wherever you stand.</p>
+
+    <figure>
+      <div class="stage" id="stage-basin" role="img" aria-label="Aurora Basin rendered in S³: snow in front with a snowman and crystal spires, a frozen lake with cracks mid-frame, an igloo and an ice castle, snowy pines, and green and violet aurora curtains overhead."><canvas></canvas></div>
+      <div class="controls">
+        <div class="btns">
+          <button type="button" id="basin-eye">Tee view</button>
+          <button type="button" id="basin-up">Look up</button>
+          <button type="button" id="basin-turn">Turn around</button>
+        </div>
+        <figcaption>Drag to look around. Tee of hole 1, camera 1.9 m up, world radius 12 m.</figcaption>
+      </div>
+    </figure>
+
+    <div class="grid">
+      <div class="card span-12">
+        <h3>Palette</h3>
+        <div class="swatches">
+          <div class="sw"><i style="background:#eef4fb"></i><b>Snow</b><code>#EEF4FB</code></div>
+          <div class="sw"><i style="background:#b6c9e6"></i><b>Snow shadow</b><code>#B6C9E6</code></div>
+          <div class="sw"><i style="background:#9fe3f5"></i><b>Lake ice</b><code>#9FE3F5</code></div>
+          <div class="sw"><i style="background:#4a8fc6"></i><b>Cracks</b><code>#4A8FC6</code></div>
+          <div class="sw"><i style="background:#2f5d4e"></i><b>Pine</b><code>#2F5D4E</code></div>
+          <div class="sw"><i style="background:#5cf2b0"></i><b>Aurora green</b><code>#5CF2B0</code></div>
+          <div class="sw"><i style="background:#a77bf0"></i><b>Aurora violet</b><code>#A77BF0</code></div>
+          <div class="sw"><i style="background:#e5503c"></i><b>Scarf red</b><code>#E5503C</code></div>
+        </div>
+      </div>
+
+      <div class="card span-5 twist">
+        <h3>The S³ twist</h3>
+        <p class="callout"><span>The lake has almost no friction, so a putt on the ice follows a great circle and can lap the whole world.</span></p>
+        <p>Rolling friction on the ice is about a tenth of grass. A firm putt that crosses the lake keeps going until it reaches snow. If it never does, it comes back to you from behind 75 m later.</p>
+        <p>The aurora marks the pole. Full power straight up passes through the curtain, crosses the pole and lands at your antipode. The curtain flashes when the ball goes through it.</p>
+      </div>
+
+      <div class="card span-7">
+        <h3>Surfaces &amp; physics</h3>
+        <div class="tbl">
+          <table>
+            <thead><tr><th>Surface</th><th>Rolling</th><th>Bounce</th><th>Effect</th></tr></thead>
+            <tbody>
+              <tr><td>Lake ice</td><td class="num">× 0.12</td><td class="num">0.55</td><td>Glides far and skips on landing. Aim to stop on snow, not on the ice.</td></tr>
+              <tr><td>Snow</td><td class="num">× 1.6</td><td class="num">0.20</td><td>Soft landings that check up quickly. The default ground.</td></tr>
+              <tr><td>Snowdrifts</td><td class="num">× 3.0</td><td class="num">0.05</td><td>Mounds the ball buries in, like a fried-egg lie.</td></tr>
+              <tr><td>Packed-snow greens</td><td class="num">× 0.9</td><td class="num">0.38</td><td>Groomed, blue-white, with mower stripes.</td></tr>
+              <tr><td>Ice crystals</td><td class="num">–</td><td class="num">0.85</td><td>Bumpers: hard, lively ricochets.</td></tr>
+            </tbody>
+          </table>
+        </div>
+      </div>
+
+      <div class="card span-7">
+        <h3>Props</h3>
+        <ul class="props">
+          <li><b>Aurora</b>: green-to-violet curtains looped round the pole, emissive with bloom</li>
+          <li><b>Ice castle</b>: hexagonal towers, crenellations and cone roofs (reuses the fort's Crenels)</li>
+          <li><b>Igloo</b>: snow-block dome with an entrance tunnel facing the course</li>
+          <li><b>Snowy pines</b>: tiered dark cones with snow caps</li>
+          <li><b>Crystal spires</b>: clusters of tilted hexagonal prisms</li>
+          <li><b>Snowman</b>: carrot nose and red scarf, near the first tee</li>
+          <li><b>Snowdrifts</b>: low wind-shaped mounds</li>
+          <li><b>Snow-capped rocks</b>: dark stone with white caps</li>
+          <li><b>Falling snow</b>: light screen-space flakes, cheap enough for any GPU</li>
+          <li><b>Lake cracks</b>: procedural lines in the ground shader, no extra geometry</li>
+        </ul>
+      </div>
+
+      <div class="card span-5">
+        <h3>Light <span class="chip">S3World.Style</span></h3>
+        <pre><span class="dot" style="background:#b39e8c"></span>sunColor      (0.70, 0.62, 0.55)
+<span class="dot" style="background:#9eb8e0"></span>skyAmbient    (0.62, 0.72, 0.88)
+<span class="dot" style="background:#b8c7e0"></span>groundAmbient (0.72, 0.78, 0.88)
+<span class="dot" style="background:#dbe9ff"></span>haze          (0.86, 0.92, 1.00, 0.45)
+<span class="dot" style="background:#8ca6d9"></span>shadowTint    (0.55, 0.65, 0.85)
+sun (R⁴)      (0.80, 0.35, 0.30, 0.40)  low, polar day
+post          bloom 0.7 (aurora) · temp −10 · vignette navy</pre>
+      </div>
+
+      <div class="card span-12">
+        <h3>Signature holes</h3>
+        <div class="holes">
+          <div class="hole"><span class="n">1</span><b>First Ice · par 3 · 11 m</b><p>The green sits just short of the lake. Overshoot and you're on the ice, sliding toward the castle.</p></div>
+          <div class="hole"><span class="n">2</span><b>Skating Rink · par 3 · 16 m</b><p>The green is across the lake. A gentle low shot skates all the way; a high one plugs in a drift.</p></div>
+          <div class="hole"><span class="n">5</span><b>Through the Lights · par 4 · 37.7 m (antipode)</b><p>The cup is exactly opposite the tee. Every direction gets there, but the intended shot is straight up through the aurora.</p></div>
+        </div>
+      </div>
+    </div>
+  </section>
+
+  <!-- ============================================================ COMPARE -->
+  <section id="compare" class="world">
+    <div class="world-head"><h2>All four maps</h2><span class="tag">same course rules, different ground</span></div>
+    <div class="card tbl">
+      <table>
+        <thead><tr><th>Map</th><th>Mood</th><th>Sun</th><th>Main surface</th><th>Signature hazard</th><th>Overhead</th></tr></thead>
+        <tbody>
+          <tr><td><b>Meadow</b></td><td>Storybook village</td><td>Neutral midday</td><td>Grass</td><td>Trees and houses</td><td>More meadow and red roofs</td></tr>
+          <tr><td><b>Desert Oasis</b></td><td>Golden hour</td><td>Low, warm</td><td>Sand with grass oases</td><td>Dunes, fort walls</td><td>Pink-hazed dunes</td></tr>
+          <tr><td><b>Coral Cove</b></td><td>Holiday morning</td><td>High, bright</td><td>Sand (bunker) and wet sand</td><td>Ocean (water hazard)</td><td>The open sea</td></tr>
+          <tr><td><b>Aurora Basin</b></td><td>Quiet polar day</td><td>Low, pale</td><td>Snow and lake ice</td><td>Frictionless ice</td><td>Aurora loop and snowfield</td></tr>
+        </tbody>
+      </table>
+    </div>
+  </section>
+
+  <!-- ============================================================ PLAN -->
+  <section id="plan" class="world plan">
+    <div class="world-head"><h2>Build plan</h2><span class="tag">what each map needs in the Unity project</span></div>
+    <div class="grid">
+      <div class="card span-6">
+        <h3>Shared groundwork</h3>
+        <ol>
+          <li><b>Surface zones</b> <span class="chip new">new</span>: circles on the ground (ocean, lake, drifts, wet sand) registered like the desert oases. The shader colours them, and the ball physics reads the same list for friction and bounce, so what you see is what the ball feels.</li>
+          <li><b>Water hazard</b> <span class="chip new">new</span>: on entering the ocean, splash, add 1 stroke and drop the ball at the crossing point.</li>
+          <li><b>Emissive vertex flag</b> <span class="chip new">new</span>: unlit, bright colours for the lighthouse lamp and the aurora, so bloom makes them glow.</li>
+          <li><b>Biome switch</b> <span class="chip">exists</span>: M cycles four maps instead of two. Each map gets a Style, a post profile and a course.</li>
+        </ol>
+      </div>
+      <div class="card span-6">
+        <h3>Per map</h3>
+        <ol>
+          <li><b>Coral Cove</b>: water shading (depth gradient, animated foam line, sun glints), plus lighthouse, pier, huts, umbrellas, surfboards, sandcastles and gulls. Palms and rocks are reused.</li>
+          <li><b>Aurora Basin</b>: ice shading (cracks, glints), snow sparkle, the aurora loop mesh at the pole, falling snow, and castle, igloo, snowman, crystals and snowy pines. Crenels are reused from the fort.</li>
+          <li><b>Performance</b>: everything new bakes into the single scenery mesh, and water, ice and snow are ground-shader branches, so draw calls stay at about 20.</li>
+        </ol>
+      </div>
+    </div>
+    <p class="foot">The frames above come from a small software version of the game's renderer: same exp map, SO(4) frames and view transform as the shader, with flat shading and painter's sorting in place of the GPU depth buffer.</p>
+  </section>
+</div>
+
+<script>
+(() => {
+"use strict";
+const R = 12;                          // world radius (m), same as the game
+const PI = Math.PI;
+const EX = [1,0,0,0], EY = [0,1,0,0], EZ = [0,0,1,0], EW = [0,0,0,1];
+
+// ---------------------------------------------------------------- S^3 math (mirrors S3.cs)
+function planeRot(a, b, t) {           // a -> a cos t + b sin t ; matrices are arrays of 4 columns
+  const c = Math.cos(t) - 1, s = Math.sin(t), cols = [];
+  for (let j = 0; j < 4; j++) {
+    const col = [0,0,0,0]; col[j] = 1;
+    for (let i = 0; i < 4; i++) col[i] += c * (a[i]*a[j] + b[i]*b[j]) + s * (b[i]*a[j] - a[i]*b[j]);
+    cols.push(col);
+  }
+  return cols;
+}
+function apply(M, p) {
+  return [0,1,2,3].map(i => M[0][i]*p[0] + M[1][i]*p[1] + M[2][i]*p[2] + M[3][i]*p[3]);
+}
+const mmul = (A, B) => B.map(col => apply(A, col));
+const I4 = [EX, EY, EZ, EW];
+function expMap(v) {                   // local metres -> point of S^3
+  const ux = v[0]/R, uy = v[1]/R, uz = v[2]/R, r = Math.hypot(ux, uy, uz);
+  if (r < 1e-9) return [0,0,0,1];
+  const s = Math.sin(r)/r;
+  return [ux*s, uy*s, uz*s, Math.cos(r)];
+}
+function groundFrame(x, z, yawDeg) {
+  const d = Math.hypot(x, z);
+  const T = d > 1e-9 ? planeRot(EW, [x/d, 0, z/d, 0], d/R) : I4;
+  return mmul(T, planeRot(EZ, EX, (yawDeg || 0) * PI / 180));
+}
+const sub4 = (a, b) => [a[0]-b[0], a[1]-b[1], a[2]-b[2], a[3]-b[3]];
+const len4 = a => Math.hypot(a[0], a[1], a[2], a[3]);
+const dot4 = (a, b) => a[0]*b[0] + a[1]*b[1] + a[2]*b[2] + a[3]*b[3];
+const distM = (a, b) => 2 * Math.asin(Math.min(1, len4(sub4(a, b)) / 2)) * R;   // geodesic metres
+const groundPoint = (x, z) => groundFrame(x, z, 0)[3];
+const lift = (foot, h) => { const c = Math.cos(h/R), s = Math.sin(h/R); return [foot[0]*c, s, foot[2]*c, foot[3]*c]; };
+
+// ---------------------------------------------------------------- small helpers
+function rng(seed) { return () => { seed |= 0; seed = seed + 0x6D2B79F5 | 0; let t = Math.imul(seed ^ seed >>> 15, 1 | seed); t = t + Math.imul(t ^ t >>> 7, 61 | t) ^ t; return ((t ^ t >>> 14) >>> 0) / 4294967296; }; }
+function hash3(x, y, z) { let h = Math.imul(x, 374761393) + Math.imul(y, 668265263) + Math.imul(z, 1440670441); h = Math.imul(h ^ (h >>> 13), 1274126177); h ^= h >>> 16; return (h >>> 0) / 4294967296; }
+function noise3(x, y, z) {
+  const xi = Math.floor(x), yi = Math.floor(y), zi = Math.floor(z);
+  let fx = x - xi, fy = y - yi, fz = z - zi;
+  fx = fx*fx*(3-2*fx); fy = fy*fy*(3-2*fy); fz = fz*fz*(3-2*fz);
+  const L = (a, b, t) => a + (b - a) * t;
+  return L(L(L(hash3(xi,yi,zi), hash3(xi+1,yi,zi), fx), L(hash3(xi,yi+1,zi), hash3(xi+1,yi+1,zi), fx), fy),
+           L(L(hash3(xi,yi,zi+1), hash3(xi+1,yi,zi+1), fx), L(hash3(xi,yi+1,zi+1), hash3(xi+1,yi+1,zi+1), fx), fy), fz);
+}
+const mix = (a, b, t) => [a[0]+(b[0]-a[0])*t, a[1]+(b[1]-a[1])*t, a[2]+(b[2]-a[2])*t];
+const mulc = (a, k) => [a[0]*k, a[1]*k, a[2]*k];
+const smooth = (e0, e1, x) => { const t = Math.min(1, Math.max(0, (x - e0) / (e1 - e0))); return t*t*(3-2*t); };
+const sub3 = (a, b) => [a[0]-b[0], a[1]-b[1], a[2]-b[2]];
+const add3 = (a, b) => [a[0]+b[0], a[1]+b[1], a[2]+b[2]];
+const sc3 = (a, k) => [a[0]*k, a[1]*k, a[2]*k];
+const cross3 = (a, b) => [a[1]*b[2]-a[2]*b[1], a[2]*b[0]-a[0]*b[2], a[0]*b[1]-a[1]*b[0]];
+const norm3 = a => { const l = Math.hypot(a[0], a[1], a[2]) || 1; return [a[0]/l, a[1]/l, a[2]/l]; };
+const hex = h => [parseInt(h.slice(1,3),16)/255, parseInt(h.slice(3,5),16)/255, parseInt(h.slice(5,7),16)/255];
+
+// ---------------------------------------------------------------- mesh builder (local metres, flat colours)
+class MB {
+  constructor(maxEdge = 1.4) { this.t = []; this.maxEdge = maxEdge; this.glow = false; }
+  tri(a, b, c, col, depth = 0) {
+    const ab = Math.hypot(...sub3(a,b)), bc = Math.hypot(...sub3(b,c)), ca = Math.hypot(...sub3(c,a));
+    const m = Math.max(ab, bc, ca);
+    if (m > this.maxEdge && depth < 6) {          // split the longest edge so the exp map can bend it
+      if (m === ab) { const mid = sc3(add3(a,b), .5); this.tri(a, mid, c, col, depth+1); this.tri(mid, b, c, col, depth+1); }
+      else if (m === bc) { const mid = sc3(add3(b,c), .5); this.tri(a, b, mid, col, depth+1); this.tri(a, mid, c, col, depth+1); }
+      else { const mid = sc3(add3(c,a), .5); this.tri(a, b, mid, col, depth+1); this.tri(mid, b, c, col, depth+1); }
+      return;
+    }
+    this.t.push({ v: [a, b, c], c: col, glow: this.glow });
+  }
+  quad(a, b, c, d, col) { this.tri(a, b, c, col); this.tri(a, c, d, col); }
+  box(mn, mx, col) {
+    const P = (x, y, z) => [x ? mx[0] : mn[0], y ? mx[1] : mn[1], z ? mx[2] : mn[2]];
+    this.quad(P(0,0,0), P(1,0,0), P(1,1,0), P(0,1,0), col); this.quad(P(1,0,1), P(0,0,1), P(0,1,1), P(1,1,1), col);
+    this.quad(P(0,0,1), P(0,0,0), P(0,1,0), P(0,1,1), col); this.quad(P(1,0,0), P(1,0,1), P(1,1,1), P(1,1,0), col);
+    this.quad(P(0,1,0), P(1,1,0), P(1,1,1), P(0,1,1), col);
+  }
+  frustum(c, r0, r1, h, n, col, phase = 0, colB = null) {
+    const top = [c[0], c[1] + h, c[2]];
+    for (let i = 0; i < n; i++) {
+      const a0 = phase + 2*PI*i/n, a1 = phase + 2*PI*(i+1)/n, cc = colB && i % 2 ? colB : col;
+      const d0 = [Math.cos(a0), 0, Math.sin(a0)], d1 = [Math.cos(a1), 0, Math.sin(a1)];
+      if (r1 > 1e-4) {
+        this.quad(add3(c, sc3(d0, r0)), add3(c, sc3(d1, r0)), add3(top, sc3(d1, r1)), add3(top, sc3(d0, r1)), cc);
+        this.tri(add3(top, sc3(d0, r1)), add3(top, sc3(d1, r1)), top, cc);
+      } else this.tri(add3(c, sc3(d0, r0)), add3(c, sc3(d1, r0)), top, cc);
+    }
+  }
+  tube(a, b, r0, r1, n, col) {
+    const ax = norm3(sub3(b, a));
+    const s1 = norm3(cross3(ax, Math.abs(ax[1]) < .9 ? [0,1,0] : [1,0,0])), s2 = cross3(ax, s1);
+    for (let i = 0; i < n; i++) {
+      const a0 = 2*PI*i/n, a1 = 2*PI*(i+1)/n;
+      const d0 = add3(sc3(s1, Math.cos(a0)), sc3(s2, Math.sin(a0))), d1 = add3(sc3(s1, Math.cos(a1)), sc3(s2, Math.sin(a1)));
+      this.quad(add3(a, sc3(d0, r0)), add3(a, sc3(d1, r0)), add3(b, sc3(d1, r1)), add3(b, sc3(d0, r1)), col);
+      this.tri(add3(b, sc3(d0, r1)), add3(b, sc3(d1, r1)), b, col);
+    }
+  }
+  ico(c, rad, col, r = null, jitter = 0, sub = 1, faceCol = null) {
+    const t = (1 + Math.sqrt(5)) / 2;
+    let pts = [[-1,t,0],[1,t,0],[-1,-t,0],[1,-t,0],[0,-1,t],[0,1,t],[0,-1,-t],[0,1,-t],[t,0,-1],[t,0,1],[-t,0,-1],[-t,0,1]].map(norm3);
+    let f = [0,11,5,0,5,1,0,1,7,0,7,10,0,10,11,1,5,9,5,11,4,11,10,2,10,7,6,7,1,8,3,9,4,3,4,2,3,2,6,3,6,8,3,8,9,4,9,5,2,4,11,6,2,10,8,6,7,9,8,1];
+    for (let s = 0; s < sub; s++) {
+      const mid = new Map(), nf = [];
+      const M = (a, b) => { const k = a < b ? a*1000+b : b*1000+a; if (!mid.has(k)) { pts.push(norm3(sc3(add3(pts[a], pts[b]), .5))); mid.set(k, pts.length-1); } return mid.get(k); };
+      for (let i = 0; i < f.length; i += 3) { const a = f[i], b = f[i+1], cc = f[i+2], ab = M(a,b), bc = M(b,cc), ca = M(cc,a); nf.push(a,ab,ca, b,bc,ab, cc,ca,bc, ab,bc,ca); }
+      f = nf;
+    }
+    const P = pts.map(p => { const k = 1 + (r ? jitter * (r()*2-1) : 0); return [c[0] + p[0]*k*rad[0], c[1] + p[1]*k*rad[1], c[2] + p[2]*k*rad[2]]; });
+    for (let i = 0; i < f.length; i += 3) {
+      const cen = sc3(add3(add3(pts[f[i]], pts[f[i+1]]), pts[f[i+2]]), 1/3);
+      this.tri(P[f[i]], P[f[i+1]], P[f[i+2]], faceCol ? faceCol(cen) : col);
+    }
+  }
+}
+
+// ---------------------------------------------------------------- renderer
+// The scene: a ground (polar disk covering the great sphere y = 0) and baked prop triangles.
+function buildScene(def) {
+  const scene = { def, ground: [], gv: [], tris: [], glowStrips: [] };
+  // props first (their feet darken the ground)
+  const feet = [];
+  for (const p of def.props) {
+    const M = groundFrame(p.x, p.z, p.yaw || 0);
+    const mb = new MB(p.maxEdge || 1.4);
+    p.make(mb);
+    const k = p.scale || 1;
+    if (k !== 1) for (const t of mb.t) t.v = t.v.map(v => sc3(v, k));
+    for (const t of mb.t) {
+      const n = norm3(cross3(sub3(t.v[1], t.v[0]), sub3(t.v[2], t.v[0])));
+      const lit = t.glow ? [1.15,1.15,1.15] : shade(def.light, n, t.v[0][1]);
+      const col = [t.c[0]*lit[0], t.c[1]*lit[1], t.c[2]*lit[2]];
+      scene.tris.push({ p: t.v.map(v => apply(M, expMap(v))), col });
+    }
+    if (p.shadow) feet.push({ p: M[3], r: p.shadow });
+  }
+  if (def.extra) def.extra(scene);
+  // ground
+  const N = 54, S = 120;
+  const verts = [[0,0,0,1]];
+  for (let k = 1; k <= N; k++) for (let i = 0; i < S; i++) {
+    const r = PI * R * k / N, a = 2*PI*i/S;
+    verts.push(expMap([Math.cos(a)*r, 0, Math.sin(a)*r]));
+  }
+  scene.gv = verts;
+  const idx = (k, i) => k === 0 ? 0 : 1 + (k-1)*S + (i % S);
+  const gl = groundLight(def.light);
+  for (let k = 0; k < N; k++) for (let i = 0; i < S; i++) {
+    const ids = k === 0 ? [0, idx(1, i), idx(1, i+1)] : [idx(k, i), idx(k, i+1), idx(k+1, i+1), idx(k+1, i)];
+    let c = [0,0,0,0]; for (const j of ids) for (let q = 0; q < 4; q++) c[q] += verts[j][q];
+    const l = len4(c); c = c.map(x => x / l);
+    let col = def.groundColor(c, k, i);
+    let shadowK = 1;
+    for (const f of feet) { const d = len4(sub4(c, f.p)) * R; if (d < 2.5*f.r) shadowK *= 1 - .45 * Math.exp(-(d*d)/(f.r*f.r)); }
+    col = mix(mulc(def.light.shadow, 1), col, shadowK);
+    scene.ground.push({ ids, col: [col[0]*gl[0], col[1]*gl[1], col[2]*gl[2]] });
+  }
+  return scene;
+}
+function shade(L, n, y) {
+  const d = Math.abs(n[0]*L.dir[0] + n[1]*L.dir[1] + n[2]*L.dir[2]);
+  const hemi = .5 + .5 * Math.abs(n[1]);
+  const amb = mix(L.groundAmb, L.skyAmb, hemi);
+  const ao = 1 - .3 * (1 - Math.min(1, Math.max(0, y / 1.4)));
+  return [(amb[0] + L.sun[0]*d) * ao, (amb[1] + L.sun[1]*d) * ao, (amb[2] + L.sun[2]*d) * ao];
+}
+function groundLight(L) { return [L.skyAmb[0] + L.sun[0]*L.dir[1], L.skyAmb[1] + L.sun[1]*L.dir[1], L.skyAmb[2] + L.sun[2]*L.dir[1]]; }
+
+function makeView(cam) {
+  let C = groundFrame(cam.x, cam.z, cam.yaw);
+  C = mmul(C, planeRot(EW, EY, cam.eye / R));
+  C = mmul(C, planeRot(EZ, EY, cam.pitch * PI / 180));
+  return C;
+}
+function render(canvas, scene, cam) {
+  const ctx = canvas.getContext('2d');
+  const W = canvas.width, H = canvas.height, def = scene.def;
+  const f = (H / 2) / Math.tan((70 * PI / 180) / 2);
+  const C = makeView(cam);
+  const view = p => [dot4(C[0], p), dot4(C[1], p), dot4(C[2], p), dot4(C[3], p)];
+  const haze = def.light.haze;
+  ctx.fillStyle = css(haze.slice(0,3)); ctx.fillRect(0, 0, W, H);
+  const polys = [];
+  // clip a polygon (view-space points) against q.z >= eps, then project
+  const EPS = 1e-4;
+  function project(qs) {
+    const out = [];
+    for (let i = 0; i < qs.length; i++) {
+      const a = qs[i], b = qs[(i+1) % qs.length], ia = a[2] >= EPS, ib = b[2] >= EPS;
+      if (ia) out.push(a);
+      if (ia !== ib) { const t = (EPS - a[2]) / (b[2] - a[2]); out.push(a.map((x, j) => x + (b[j] - x) * t)); }
+    }
+    if (out.length < 3) return null;
+    return out.map(q => [W/2 + f*q[0]/q[2], H/2 - f*q[1]/q[2]]);
+  }
+  function depthOf(qs) { let s = [0,0,0,0]; for (const q of qs) for (let j = 0; j < 4; j++) s[j] += q[j]; return Math.atan2(Math.hypot(s[0], s[1], s[2]), s[3]); }
+  function hazed(col, t) { const k = haze[3] * smooth(.4*PI, PI, t); return mix(col, haze, k); }
+
+  // ground (never occludes props: a geodesic from the eye meets the ground great-sphere once in (0, pi))
+  const gq = scene.gv.map(view);
+  for (const g of scene.ground) {
+    const qs = g.ids.map(j => gq[j]);
+    const pts = project(qs); if (!pts) continue;
+    polys.push({ d: depthOf(qs), pts, col: hazed(g.col, depthOf(qs)), ground: 1 });
+  }
+  polys.sort((a, b) => b.d - a.d);
+  drawPolys(ctx, polys);
+  // props, back to front
+  const pp = [];
+  for (const t of scene.tris) {
+    const qs = t.p.map(view);
+    const pts = project(qs); if (!pts) continue;
+    const d = depthOf(qs);
+    pp.push({ d, pts, col: hazed(t.col, d) });
+  }
+  // translucent aurora curtains, depth-sorted with the props
+  for (const g of scene.glowStrips) {
+    const qs = g.p.map(view);
+    const pts = project(qs); if (!pts) continue;
+    pp.push({ d: depthOf(qs), pts, col: g.col, a: g.a });
+  }
+  pp.sort((a, b) => b.d - a.d);
+  drawPolys(ctx, pp);
+  if (def.overlay) def.overlay(ctx, W, H);
+}
+function css(c) { return `rgb(${Math.round(Math.min(1, c[0])*255)},${Math.round(Math.min(1, c[1])*255)},${Math.round(Math.min(1, c[2])*255)})`; }
+function path(ctx, pts) { ctx.beginPath(); ctx.moveTo(pts[0][0], pts[0][1]); for (let i = 1; i < pts.length; i++) ctx.lineTo(pts[i][0], pts[i][1]); ctx.closePath(); }
+function drawPolys(ctx, polys) {
+  ctx.lineJoin = 'round';
+  for (const p of polys) {
+    const c = css(p.col);
+    path(ctx, p.pts);
+    if (p.a !== undefined) { ctx.globalAlpha = p.a; ctx.fillStyle = c; ctx.fill(); ctx.globalAlpha = 1; continue; }
+    ctx.fillStyle = c; ctx.strokeStyle = c; ctx.lineWidth = 0.9;
+    ctx.fill(); ctx.stroke();
+  }
+}
+
+// ---------------------------------------------------------------- shared props
+function palm(mb, r, s) {
+  const H = (5 + 2.2*r()) * s, la = 2*PI*r(), lean = (.6 + 1.2*r()) * s, ld = [Math.cos(la), 0, Math.sin(la)];
+  let prev = [0,0,0], rp = .27*s;
+  for (let k = 1; k <= 7; k++) {
+    const t = k/7, p = add3(sc3(ld, lean*t*t), [0, H*t, 0]), rr = (.27 - .11*t) * s;
+    mb.tube(prev, p, rp, rr, 6, k % 2 ? hex('#8c6c4e') : hex('#7a5d43')); prev = p; rp = rr;
+  }
+  const crown = prev, n = 8 + Math.floor(r()*3);
+  for (let i = 0; i < n; i++) {
+    const a = 2*PI*i/n + .3*r(), dir = [Math.cos(a), 0, Math.sin(a)], side = cross3([0,1,0], dir);
+    const L = (2.5 + .9*r()) * s, droop = .85 + .4*r();
+    const P = u => add3(add3(crown, sc3(dir, L*u)), [0, L*(.45*u - droop*u*u), 0]);
+    const Wd = u => .44*s*Math.sin(PI*Math.min(u*1.1, 1)) + .02;
+    for (let j = 0; j < 5; j++) {
+      const u0 = j/5, u1 = (j+1)/5, c0 = P(u0), c1 = P(u1), w0 = Wd(u0), w1 = Wd(u1);
+      const f0 = add3(c0, [0, .12*w0, 0]), f1 = add3(c1, [0, .12*w1, 0]);
+      const col = mix(hex('#3d7a2c'), hex('#7fae3c'), u0*.8 + .2*r());
+      mb.quad(f0, f1, sub3(c1, sc3(side, w1)), sub3(c0, sc3(side, w0)), col);
+      mb.quad(f0, add3(c0, sc3(side, w0)), add3(c1, sc3(side, w1)), f1, mulc(col, .9));
+    }
+  }
+  for (let i = 0; i < 3; i++) { const a = 2*PI*i/3; mb.ico(add3(crown, [Math.cos(a)*.18*s, -.25*s, Math.sin(a)*.18*s]), [.13*s,.13*s,.13*s], hex('#6b4f2a'), null, 0, 0); }
+}
+function rock(mb, r, size, col, snowCap) {
+  mb.ico([0, size*.3, 0], [size*1.2, size*.8, size], col, r, .22, 1);
+  if (snowCap) mb.ico([0, size*.75, 0], [size*.9, size*.25, size*.75], hex('#f2f7fd'), r, .15, 1);
+}
+function flagAndBall(props, cup, ball, aimTo, pinCol) {
+  props.push({ x: cup[0], z: cup[1], make: mb => {
+    mb.box([-.03,0,-.03], [.03,2.4,.03], hex('#f4f4ef'));
+    mb.tri([0,2.38,0], [0,1.8,0], [.8,2.1,0], hex(pinCol || '#e5503c'));
+  }});
+  const dir = norm3([aimTo[0]-ball[0], 0, aimTo[1]-ball[1]]);
+  const yaw = Math.atan2(dir[0], dir[2]) * 180 / PI;
+  props.push({ x: ball[0], z: ball[1], yaw, make: mb => {
+    mb.ico([0,.31,0], [.31,.31,.31], hex('#fbfbf7'), null, 0, 2, c => Math.abs(c[1]) < .2 ? hex('#e5503c') : hex('#fbfbf7'));
+    mb.glow = true;
+    for (let k = 0; k < 9; k++) {
+      const t = .55 + .3*k, a = 30 * PI / 180;
+      mb.ico([0, .31 + Math.sin(a)*t, Math.cos(a)*t], [.06,.06,.06], mix(hex('#ffe34d'), hex('#ff7a1a'), k/8), null, 0, 0);
+    }
+  }});
+}
+
+// ---------------------------------------------------------------- Coral Cove
+function coveDef() {
+  const r = rng(7), props = [];
+  const ocean = groundPoint(0, 26), oceanR = 16;
+  const cup = [4.6, 11.2], ball = [0, 2.6];
+  const cupP = groundPoint(...cup);
+  const sand = hex('#f2d6a2'), wet = hex('#c9a06e'), shallow = hex('#5fd3c6'), deep = hex('#1d6ea8'), foam = hex('#f6fbff'), grass = hex('#7cc45a');
+  const light = { dir: norm3([.45, .85, .2]), sun: [.62*.62, .58*.62, .5*.62], skyAmb: [.62, .72, .78], groundAmb: [.66, .6, .5], haze: [.80, .92, .98, .2], shadow: hex('#9aa8bd') };
+
+  // palms
+  for (const [x, z, s] of [[-4.6, 3.2, 1], [5.8, 4.4, .95], [-8.2, 9.6, 1.1], [9.4, 11.2, 1], [-2.8, 12.6, .9], [12.5, 4, 1.1]])
+    props.push({ x, z, make: mb => palm(mb, r, s), shadow: 2 * s });
+  // umbrella + towel + beach ball
+  props.push({ x: 2.4, z: 6.4, make: mb => {
+    mb.box([-.03,0,-.03], [.03,2.3,.03], hex('#f3f1ea'));
+    mb.frustum([0,1.95,0], 1.35, 0, .5, 10, hex('#e8553d'), 0, hex('#f6f3ec'));
+  }, shadow: 1.3 });
+  props.push({ x: 3.2, z: 7.4, yaw: 20, maxEdge: 3, make: mb => {
+    mb.box([-.42,0,-.9], [-.14,.02,.9], hex('#2f8fd0')); mb.box([-.14,0,-.9], [.14,.02,.9], hex('#f7f2e6')); mb.box([.14,0,-.9], [.42,.02,.9], hex('#2f8fd0'));
+  }});
+  props.push({ x: 1.5, z: 7.7, make: mb => mb.ico([0,.25,0], [.25,.25,.25], hex('#ffffff'), null, 0, 1, c => { const a = Math.atan2(c[2], c[0]); const k = Math.floor((a + PI) / (PI/3)); return hex(['#e8553d','#ffd34d','#2f8fd0','#ffffff','#4fbf6a','#ffffff'][k % 6]); }) });
+  // sandcastle
+  props.push({ x: -1.7, z: 5.4, yaw: 20, make: mb => {
+    const sc = hex('#e8c48c');
+    mb.box([-.8,0,-.8], [.8,.45,.8], sc);
+    for (const [x, z] of [[-.75,-.75],[.75,-.75],[-.75,.75],[.75,.75]]) { mb.frustum([x,0,z], .28, .24, .85, 6, sc); mb.frustum([x,.85,z], .3, 0, .35, 6, hex('#d9ae73')); }
+    mb.frustum([0,.45,0], .42, .36, .95, 7, sc); mb.frustum([0,1.4,0], .45, 0, .45, 7, hex('#d9ae73'));
+    mb.box([-.01,1.85,-.01], [.01,2.2,.01], hex('#5c4632')); mb.tri([0,2.2,0], [0,2.0,0], [.25,2.1,0], hex('#e8553d'));
+  }, shadow: 1 });
+  // surfboards
+  for (const [x, z, col, yaw] of [[7.0, 7.4, '#2fc1c9', 15], [7.6, 7.1, '#ffcc4d', -10]])
+    props.push({ x, z, yaw, make: mb => { mb.ico([0, 1.0, 0], [.28, 1.0, .06], hex(col), null, 0, 1, c => Math.abs(c[0]) < .12 ? hex('#ffffff') : hex(col)); } });
+  // beach huts
+  for (const [x, z, yaw, col] of [[-11.2, 6.2, 70, '#8fd3e8'], [-12.4, 9.8, 80, '#f5a3a3'], [11.8, 7.4, -70, '#ffe08a']])
+    props.push({ x, z, yaw, make: mb => {
+      const c = hex(col);
+      mb.box([-1,0,-1], [1,2,1], c);
+      for (let i = 0; i < 4; i++) {
+        const z0 = -1.2 + .6*i, z1 = z0 + .6, rc = i % 2 ? hex('#ffffff') : hex('#e8553d');
+        mb.quad([-1.2,1.9,z0], [-1.2,1.9,z1], [0,2.75,z1], [0,2.75,z0], rc); mb.quad([1.2,1.9,z1], [1.2,1.9,z0], [0,2.75,z0], [0,2.75,z1], rc);
+      }
+      mb.tri([-1,2,-1], [1,2,-1], [0,2.75,-1], c); mb.tri([1,2,1], [-1,2,1], [0,2.75,1], c);
+      mb.quad([-.35,0,-1.02], [.35,0,-1.02], [.35,1.5,-1.02], [-.35,1.5,-1.02], hex('#5b4636'));
+    }, shadow: 1.6 });
+  // lighthouse on a rock point
+  props.push({ x: -12.5, z: 13.5, yaw: 30, scale: .6, make: mb => {
+    const gr = hex('#8b8f93');
+    mb.ico([0,.3,0], [2.4,1.1,2.1], gr, r, .2, 1); mb.ico([1.6,.2,1.2], [1.3,.8,1.1], gr, r, .2, 1);
+    for (let i = 0; i < 6; i++) { const y = .9 + 1.5*i, r0 = 1.05 - .05*i, r1 = r0 - .05; mb.frustum([0,y,0], r0, r1, 1.5, 12, hex(i % 2 ? '#f6f3ec' : '#e8553d')); }
+    mb.frustum([0,9.9,0], 1.15, 1.15, .18, 12, hex('#3b3f45'));
+    mb.glow = true; mb.frustum([0,10.08,0], .55, .55, .9, 10, hex('#ffe9a8')); mb.glow = false;
+    mb.frustum([0,10.98,0], .75, 0, .8, 10, hex('#e8553d'));
+  }, shadow: 1.6 });
+  // pier
+  props.push({ x: 2.8, z: 13.6, yaw: 4, maxEdge: 1, make: mb => {
+    for (let i = 0; i < 22; i++) { const z = .5*i; mb.box([-.85,.55,z], [.85,.65,z+.42], hex(i % 2 ? '#a77b55' : '#b88a60')); }
+    for (let i = 0; i <= 5; i++) { const z = 2.1*i; for (const x of [-.8, .8]) mb.box([x-.08,-.2,z], [x+.08,1.15,z+.16], hex('#6b4a33')); }
+  }});
+  // rocks along the shore
+  for (const [x, z, s] of [[-7.4, 15.2, .8], [-11.2, 14.4, 1], [8.8, 15.6, .7], [12.2, 12.8, 1.1], [-13.5, 12.4, .8]])
+    props.push({ x, z, make: mb => rock(mb, r, s, hex('#8f9397')), shadow: s });
+  // dune grass around the green and the huts
+  for (let i = 0; i < 70; i++) {
+    const a = 2*PI*r(), d = 3.6 + 1.6*r();
+    const x = i < 40 ? cup[0] + Math.cos(a)*d : -11 + 4*r() - 2, z = i < 40 ? cup[1] + Math.sin(a)*d*.8 : 4 + 8*r();
+    props.push({ x, z, maxEdge: 3, make: mb => { for (let b = 0; b < 5; b++) { const ang = 2*PI*r(), dir = [Math.cos(ang), 0, Math.sin(ang)], side = [-dir[2], 0, dir[0]], h = .35 + .4*r(); mb.tri(sc3(side, -.04), sc3(side, .04), add3(sc3(dir, .15), [0, h, 0]), mix(hex('#8fb64a'), hex('#c9c46a'), r())); } } });
+  }
+  // gulls
+  for (const [x, z, h, s] of [[-1.2, 13.5, 6.2, 1], [2.4, 18, 7.4, 1.2], [6, 24, 8.6, 1.4], [-5, 22, 7.6, 1.3]])
+    props.push({ x, z, maxEdge: 3, make: mb => {
+      const w = .55*s, c = hex('#fbfbfb'), d = hex('#c9ced3');
+      mb.tri([0,h,0], [-w,h+.22*s,-.08], [-w*.5,h+.05,.15*s], c); mb.tri([0,h,0], [w,h+.22*s,-.08], [w*.5,h+.05,.15*s], d);
+    }});
+  flagAndBall(props, cup, ball, cup);
+
+  function groundColor(p) {
+    const g = [p[0]*R, p[2]*R, p[3]*R];
+    const n1 = noise3(g[0]*.25, g[1]*.25, g[2]*.25), n2 = noise3(g[0]*1.2, g[1]*1.2, g[2]*1.2), n3 = noise3(g[0]*4, g[1]*4, g[2]*4);
+    const dO = distM(p, ocean) - oceanR - (n1 - .5) * 1.6;      // < 0 : in the sea
+    let col;
+    if (dO < 0) {
+      const depth = -dO;
+      col = mix(shallow, deep, smooth(0, 7, depth));
+      col = mulc(col, .94 + .1*n2);
+      col = mix(col, foam, smooth(.7, 0, depth) * .9);                                                          // foam line
+    } else {
+      const rip = Math.sin(g[0]*2.3 + g[1]*1.1 + g[2]*.7 + n2*5) * .5 + .5;
+      col = mulc(mix(sand, hex('#f7e1b4'), n1), (.94 + .07*rip) * (.95 + .06*n3));
+      col = mix(col, wet, smooth(1.6, .2, dO));
+    }
+    const dc = distM(p, cupP);
+    if (dc < 3.4) col = mix(col, mulc(grass, .96 + .06*n3 + (Math.floor(g[0]*.5) % 2 ? .03 : 0)), smooth(3.4, 3.0, dc));
+    if (dc < .62) col = hex('#101410');
+    return col;
+  }
+  return { light, props, groundColor, cam: { x: 0, z: -.9, yaw: 6, pitch: -7, eye: 1.9 } };
+}
+
+// ---------------------------------------------------------------- Aurora Basin
+function basinDef() {
+  const r = rng(21), props = [];
+  const lake = groundPoint(0, 17.5), lakeR = 6.8;
+  const cup = [-1.6, 9.2], ball = [0, 2.6];
+  const cupP = groundPoint(...cup);
+  const snow = hex('#eef4fb'), snowSh = hex('#c9d8ee'), ice = hex('#9fe3f5'), ice2 = hex('#6ec1e6'), crack = hex('#4a8fc6');
+  const light = { dir: norm3([.8, .35, .3]), sun: [.70*.4, .62*.4, .55*.4], skyAmb: [.66, .74, .88], groundAmb: [.74, .8, .9], haze: [.86, .92, 1.0, .4], shadow: hex('#93a9d6') };
+
+  const pine = (mb, s) => {
+    mb.frustum([0,0,0], .2*s, .14*s, 1.1*s, 6, hex('#5a4030'));
+    for (let k = 0; k < 3; k++) {
+      const y = (.8 + .95*k) * s, rr = (1.45 - .38*k) * s, h = 1.7 * s;
+      mb.frustum([0,y,0], rr, 0, h, 7, hex('#2f5d4e'), k*.4);
+      mb.frustum([0,y + h*.45,0], rr*.58, 0, h*.55 + .02, 7, hex('#f2f7fd'), k*.4);
+    }
+  };
+  for (const [x, z, s] of [[-5.2, 4.2, 1], [-7.6, 7.4, 1.15], [6.4, 5.4, 1.05], [8.6, 9.4, 1.2], [-9.8, 12.4, 1.1], [10.8, 14.6, 1], [-4.2, 23, 1.2], [5.4, 25, 1.3], [-12, 3, 1], [12.5, 3.5, 1.1]])
+    props.push({ x, z, make: mb => pine(mb, s), shadow: 1.4 * s });
+  // crystal spires
+  const crystal = mb => {
+    const cols = ['#9fe3f5', '#6ec1e6', '#c4f1fb', '#8fd0f2'];
+    const n = 3 + Math.floor(r()*3);
+    for (let i = 0; i < n; i++) {
+      const a = 2*PI*r(), tilt = .1 + .35*r(), h = 1.2 + 2.2*r();
+      const base = [Math.cos(a)*.3, 0, Math.sin(a)*.3], top = add3(base, [Math.cos(a)*tilt*h, h, Math.sin(a)*tilt*h]);
+      const tip = add3(top, sc3(norm3(sub3(top, base)), .5));
+      const c = hex(cols[i % cols.length]);
+      mb.tube(base, top, .24, .22, 6, c); mb.tube(top, tip, .22, .01, 6, mulc(c, 1.08));
+    }
+  };
+  for (const [x, z] of [[3.6, 8.2], [-3.4, 10.4], [9.2, 18.4], [-10.5, 19.5]]) props.push({ x, z, make: crystal, shadow: 1 });
+  // igloo
+  props.push({ x: 5.6, z: 12.8, yaw: -160, make: mb => {
+    const c = hex('#e3edf8'), Rr = 1.7;
+    for (let k = 0; k < 5; k++) { const a0 = PI/2*k/5, a1 = PI/2*(k+1)/5; mb.frustum([0, Rr*Math.sin(a0), 0], Rr*Math.cos(a0), Rr*Math.cos(a1) + (k === 4 ? 0 : 0), Rr*(Math.sin(a1)-Math.sin(a0)), 12, k % 2 ? c : mulc(c, .96)); }
+    mb.box([-.5,0,-2.5], [.5,.9,-1.2], c);
+    mb.quad([-.32,0,-2.52], [.32,0,-2.52], [.32,.7,-2.52], [-.32,.7,-2.52], hex('#3a4f6e'));
+  }, shadow: 1.8 });
+  // ice castle
+  props.push({ x: -11.5, z: 20.5, yaw: 35, scale: .62, make: mb => {
+    const c = hex('#c9ecf8'), d = hex('#9fd6ee'), roof = hex('#6fb6e2');
+    const tower = (x, z, rr, h) => {
+      mb.frustum([x,0,z], rr, rr*.9, h, 6, c, PI/6);
+      for (let i = 0; i < 6; i++) { const a = PI/6 + 2*PI*i/6; mb.box([x + Math.cos(a)*rr*.85 - .18, h, z + Math.sin(a)*rr*.85 - .18], [x + Math.cos(a)*rr*.85 + .18, h + .4, z + Math.sin(a)*rr*.85 + .18], d); }
+      mb.frustum([x,h + .1,z], rr*.75, 0, rr*1.4, 6, roof, PI/6);
+    };
+    tower(0, 0, 1.6, 7); tower(-3.4, .4, 1, 4.6); tower(3.2, .2, 1, 5.2);
+    mb.box([-3, 0, -.5], [3, 2.8, .6], d);
+    for (let x = -2.8; x < 2.8; x += .7) mb.box([x, 2.8, -.5], [x + .35, 3.2, .6], c);
+    mb.quad([-.45,0,-.52], [.45,0,-.52], [.45,1.9,-.52], [-.45,1.9,-.52], hex('#3f6f9a'));
+    mb.quad([-.25,4.5,-1.4], [.25,4.5,-1.4], [.25,5.3,-1.4], [-.25,5.3,-1.4], hex('#3f6f9a'));
+  }, shadow: 3 });
+  // snowman
+  props.push({ x: -2.4, z: 5.4, yaw: 165, make: mb => {
+    const w = hex('#f4f8fd');
+    mb.ico([0,.55,0], [.6,.55,.6], w, null, 0, 1); mb.ico([0,1.38,0], [.44,.42,.44], w, null, 0, 1); mb.ico([0,2.02,0], [.32,.32,.32], w, null, 0, 1);
+    mb.frustum([0,1.7,0], .36, .36, .14, 10, hex('#e5503c'));
+    mb.tube([0,2.04,-.28], [0,2.0,-.68], .07, .01, 6, hex('#f08a2c'));
+    for (const x of [-.11, .11]) mb.ico([x,2.14,-.28], [.04,.04,.04], hex('#1d1d22'), null, 0, 0);
+    for (const y of [1.25, 1.45]) mb.ico([0,y,-.43], [.04,.04,.04], hex('#1d1d22'), null, 0, 0);
+  }, shadow: .8 });
+  // drifts and rocks
+  for (const [x, z, sx, sz] of [[-6.4, 1.2, 2.6, 1.4], [7.8, 2.6, 2.2, 1.3], [-11, 16.4, 3.2, 1.8], [11.2, 20.5, 3, 1.6]])
+    props.push({ x, z, yaw: 360*r(), maxEdge: 2, make: mb => mb.ico([0,-.2,0], [sx, .7, sz], hex('#f0f5fc'), r, .05, 2) });
+  for (const [x, z, s] of [[2.2, 11.2, .7], [-6.8, 12.6, .9], [7.6, 17.8, .8]])
+    props.push({ x, z, make: mb => rock(mb, r, s, hex('#4b5260'), true), shadow: s });
+  flagAndBall(props, cup, ball, cup, '#2f6fd0');
+
+  // aurora: curtains looped around the pole, 7-13 m above a wavy circle on the ground
+  function extra(scene) {
+    const A = groundPoint(-13, 13), P2 = groundPoint(13, 14);
+    let B = sub4(P2, A.map(v => v * dot4(P2, A))); const lb = len4(B); B = B.map(v => v / lb);
+    // third ground direction orthogonal to A and B (the ground sphere lives in x, z, w)
+    let Cv = [0,0,0,0];
+    for (const e of [EX, EZ, EW]) { let v = sub4(e, A.map(x => x * dot4(e, A))); v = sub4(v, B.map(x => x * dot4(v, B))); if (len4(v) > len4(Cv)) Cv = v; }
+    const lc = len4(Cv); Cv = Cv.map(v => v / lc);
+    const u = th => { const v = [0,1,2,3].map(i => Math.cos(th)*A[i] + Math.sin(th)*B[i] + .16*Math.sin(3*th)*Cv[i]); const l = len4(v); return v.map(x => x / l); };
+    const steps = 220, bands = [[7, 8.6, '#3fe39b', .66], [8.6, 10.4, '#45d6b4', .5], [10.4, 12, '#7f7ff0', .34], [12, 13.2, '#a06ff0', .16]];
+    for (let i = 0; i < steps; i++) {
+      const t0 = 2*PI*i/steps, t1 = 2*PI*(i+1)/steps;
+      const wob = th => 1.2*Math.sin(th*7) + .6*Math.sin(th*13 + 1);
+      const f0 = u(t0), f1 = u(t1);
+      const flick = .65 + .35*Math.sin(i*.9) * Math.sin(i*.23);
+      for (const [h0, h1, c, a] of bands) {
+        scene.glowStrips.push({ p: [lift(f0, h0 + wob(t0)), lift(f1, h0 + wob(t1)), lift(f1, h1 + wob(t1)), lift(f0, h1 + wob(t0))], col: hex(c), a: a * flick });
+      }
+    }
+  }
+
+  function groundColor(p) {
+    const g = [p[0]*R, p[2]*R, p[3]*R];
+    const n1 = noise3(g[0]*.22, g[1]*.22, g[2]*.22), n2 = noise3(g[0]*1.1, g[1]*1.1, g[2]*1.1), nc = noise3(g[0]*.9 + 7, g[1]*.9, g[2]*.9);
+    const dL = distM(p, lake) - lakeR - (n1 - .5) * 1.4;
+    let col;
+    if (dL < 0) {
+      col = mix(ice, ice2, smooth(.2, .8, n2));
+      if (Math.abs(nc - .5) < .03 || Math.abs(noise3(g[0]*2.1, g[1]*2.1 + 3, g[2]*2.1) - .5) < .018) col = mix(col, crack, .75);
+      if (hash3(Math.floor(g[0]*4), Math.floor(g[1]*4), Math.floor(g[2]*4)) > .992) col = [1, 1, 1];
+      col = mix(col, snow, smooth(-.35, 0, dL) * .8);
+    } else {
+      col = mix(snow, snowSh, smooth(.55, .85, n1) * .7);
+      col = mulc(col, .95 + .06*n2);
+      const sastrugi = Math.sin(g[0]*1.7 - g[1]*2.3 + n2*4) * .5 + .5;
+      col = mulc(col, .97 + .04*sastrugi);
+      if (hash3(Math.floor(g[0]*5), Math.floor(g[1]*5), Math.floor(g[2]*5)) > .993) col = [1.05, 1.05, 1.1];
+    }
+    const dc = distM(p, cupP);
+    if (dc < 3.4) col = mix(col, mulc(hex('#d6e6f7'), .97 + (Math.floor(g[0]*.5) % 2 ? .04 : 0)), smooth(3.4, 3.0, dc));
+    if (dc < .62) col = hex('#1a2333');
+    return col;
+  }
+  function overlay(ctx, W, H) {        // falling snow
+    const rr = rng(5);
+    ctx.fillStyle = 'rgba(255,255,255,0.85)';
+    for (let i = 0; i < 260; i++) {
+      const x = rr()*W, y = rr()*H, s = (.6 + rr()*1.8) * W / 1200;
+      ctx.beginPath(); ctx.arc(x, y, s, 0, 2*PI); ctx.fill();
+    }
+  }
+  return { light, props, groundColor, extra, overlay, cam: { x: 0, z: -.9, yaw: -4, pitch: 6, eye: 1.9 } };
+}
+
+// ---------------------------------------------------------------- wiring
+function setup(stageId, def, prefix) {
+  const stage = document.getElementById(stageId), canvas = stage.querySelector('canvas');
+  const scene = buildScene(def);
+  const home = { ...def.cam };
+  const cam = { ...def.cam };
+  let pending = false;
+  function draw() { pending = false; render(canvas, scene, cam); }
+  function request() { if (!pending) { pending = true; requestAnimationFrame(draw); } }
+  function resize() {
+    const dpr = Math.min(window.devicePixelRatio || 1, 2), w = stage.clientWidth, h = stage.clientHeight;
+    canvas.width = Math.max(2, Math.round(w * dpr)); canvas.height = Math.max(2, Math.round(h * dpr));
+    request();
+  }
+  new ResizeObserver(resize).observe(stage);
+  let drag = null;
+  stage.addEventListener('pointerdown', e => { drag = { x: e.clientX, y: e.clientY, yaw: cam.yaw, pitch: cam.pitch }; stage.setPointerCapture(e.pointerId); });
+  stage.addEventListener('pointermove', e => {
+    if (!drag) return;
+    cam.yaw = drag.yaw + (e.clientX - drag.x) * .25;
+    cam.pitch = Math.max(-80, Math.min(85, drag.pitch - (e.clientY - drag.y) * .25));
+    request();
+  });
+  const end = () => { drag = null; };
+  stage.addEventListener('pointerup', end); stage.addEventListener('pointercancel', end);
+  document.getElementById(prefix + '-eye').addEventListener('click', () => { Object.assign(cam, home); request(); });
+  document.getElementById(prefix + '-up').addEventListener('click', () => { Object.assign(cam, home, { pitch: 62 }); request(); });
+  document.getElementById(prefix + '-turn').addEventListener('click', () => { Object.assign(cam, home, { yaw: home.yaw + 180, pitch: 2 }); request(); });
+  resize();
+}
+setup('stage-cove', coveDef(), 'cove');
+setup('stage-basin', basinDef(), 'basin');
+})();
+</script>

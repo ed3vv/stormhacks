@@ -110,25 +110,47 @@ public static class S3
     /// <summary>Unit tangent at p pointing away from the ground.</summary>
     public static Vector4 UpAt(Vector4 p) => (EY - p.y * p).normalized;
 
-    /// <summary>Gram-Schmidt v against an orthonormal set; zero if v lies in their span.</summary>
-    public static Vector4 Ortho(Vector4 v, params Vector4[] basis)
+    // Gram-Schmidt helpers. Fixed-arity overloads instead of params arrays: these run hundreds
+    // of times a frame (physics, cameras), and a params array is a heap allocation per call.
+
+    /// <summary>v made orthogonal to the orthonormal a (and b, c) and normalised; zero if v lies in their span.</summary>
+    public static Vector4 Ortho(Vector4 v, Vector4 a) => Unit(v - Vector4.Dot(v, a) * a);
+
+    public static Vector4 Ortho(Vector4 v, Vector4 a, Vector4 b)
     {
-        foreach (var b in basis) v -= Vector4.Dot(v, b) * b;
+        v -= Vector4.Dot(v, a) * a;
+        return Unit(v - Vector4.Dot(v, b) * b);
+    }
+
+    public static Vector4 Ortho(Vector4 v, Vector4 a, Vector4 b, Vector4 c)
+    {
+        v -= Vector4.Dot(v, a) * a;
+        v -= Vector4.Dot(v, b) * b;
+        return Unit(v - Vector4.Dot(v, c) * c);
+    }
+
+    static Vector4 Unit(Vector4 v)
+    {
         float m = v.magnitude;
         return m > 1e-6f ? v / m : Vector4.zero;
     }
 
-    static Vector4 AnyOrtho(params Vector4[] basis)
+    static readonly Vector4[] Axes = { EX, EY, EZ, EW };
+
+    /// <summary>Some unit vector orthogonal to the orthonormal a, b, c (the best-conditioned axis).</summary>
+    static Vector4 AnyOrtho(Vector4 a, Vector4 b, Vector4 c, int count)
     {
         Vector4 best = Vector4.zero;
         float bestLen = -1;
-        foreach (var e in new[] { EX, EY, EZ, EW })
+        foreach (var e in Axes)
         {
-            Vector4 v = e;
-            foreach (var b in basis) v -= Vector4.Dot(v, b) * b;
-            if (v.magnitude > bestLen) { bestLen = v.magnitude; best = v; }
+            Vector4 v = e - Vector4.Dot(e, a) * a;
+            if (count > 1) v -= Vector4.Dot(v, b) * b;
+            if (count > 2) v -= Vector4.Dot(v, c) * c;
+            float m = v.magnitude;
+            if (m > bestLen) { bestLen = m; best = v; }
         }
-        return best.normalized;
+        return best / bestLen;
     }
 
     /// <summary>Right-handed frame at pos with the given up and (approximate) forward.</summary>
@@ -136,10 +158,10 @@ public static class S3
     {
         pos = pos.normalized;
         up = Ortho(up, pos);
-        if (up == Vector4.zero) up = AnyOrtho(pos);
+        if (up == Vector4.zero) up = AnyOrtho(pos, pos, pos, 1);
         Vector4 f = Ortho(forwardHint, pos, up);
-        if (f == Vector4.zero) f = AnyOrtho(pos, up);
-        Vector4 r = AnyOrtho(pos, up, f);
+        if (f == Vector4.zero) f = AnyOrtho(pos, up, up, 2);
+        Vector4 r = AnyOrtho(pos, up, f, 3);
         var m = new Matrix4x4(r, up, f, pos);
         if (m.determinant < 0) m.SetColumn(0, -r);
         return m;

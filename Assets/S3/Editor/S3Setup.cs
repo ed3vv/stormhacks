@@ -1,4 +1,6 @@
+using System.Collections.Generic;
 using System.IO;
+using System.Linq;
 using System.Text;
 using UnityEditor;
 using UnityEditor.SceneManagement;
@@ -41,10 +43,10 @@ public static class S3Setup
         world.groundMaterial = groundMat;
         var golf = worldGo.AddComponent<S3Golf>();
         golf.player = player;
-        world.Build();   // OnEnable built it before the materials were assigned
 
         Directory.CreateDirectory(Path.GetDirectoryName(ScenePath));
         EditorSceneManager.SaveScene(scene, ScenePath);
+        SetupGraphics();   // post volume, camera AA, pipeline settings; rebuilds and saves
         EditorBuildSettings.scenes = new[] { new EditorBuildSettingsScene(ScenePath, true) };
         AssetDatabase.SaveAssets();
         Debug.Log("[S3] Scene created at " + ScenePath);
@@ -86,6 +88,141 @@ public static class S3Setup
         }
     }
 
+    /// <summary>
+    /// Graphics and performance settings for the open S3 scene:
+    ///   * a global post-processing volume with one profile per map (bloom, neutral tonemapping,
+    ///     grading, vignette; all effects that don't read depth, which isn't Euclidean here),
+    ///   * SMAA on the camera instead of MSAA,
+    ///   * no camera depth / opaque texture copies (nothing reads them; they cost two passes a frame).
+    /// </summary>
+    [MenuItem("S3/Setup Graphics")]
+    public static void SetupGraphics()
+    {
+        ConfigureRenderers();
+        foreach (var guid in AssetDatabase.FindAssets("t:UniversalRenderPipelineAsset"))
+        {
+            var rp = AssetDatabase.LoadAssetAtPath<UniversalRenderPipelineAsset>(AssetDatabase.GUIDToAssetPath(guid));
+            if (rp == null) continue;
+            rp.supportsCameraDepthTexture = false;
+            rp.supportsCameraOpaqueTexture = false;
+            rp.msaaSampleCount = 1;
+            rp.supportsHDR = true;
+            EditorUtility.SetDirty(rp);
+        }
+
+        var meadow = PostProfile($"{Root}/Post/MeadowPost.asset", 0);
+        var desert = PostProfile($"{Root}/Post/DesertPost.asset", 1);
+        var basin = PostProfile($"{Root}/Post/BasinPost.asset", 2);
+
+        var world = Object.FindAnyObjectByType<S3World>();
+        world.beamMaterial = ShaderMaterial($"{Root}/Materials/S3Beam.mat", "S3/Beam");
+        world.glowMaterial = ShaderMaterial($"{Root}/Materials/S3Glow.mat", "S3/Glow");
+        world.glowMaterial.SetFloat("_Intensity", 1.5f);
+        world.glowMaterial.SetFloat("_Shimmer", 0.8f);
+        EditorUtility.SetDirty(world.glowMaterial);
+        world.basinPost = basin;
+        var volume = Object.FindAnyObjectByType<Volume>();
+        if (volume == null) volume = new GameObject("Post Volume").AddComponent<Volume>();
+        volume.isGlobal = true;
+        volume.priority = 10;
+        world.postVolume = volume;
+        world.meadowPost = meadow;
+        world.desertPost = desert;
+        EditorUtility.SetDirty(world);
+
+        var player = Object.FindAnyObjectByType<S3Player>();
+        var data = player.GetComponent<UniversalAdditionalCameraData>();
+        if (data == null) data = player.gameObject.AddComponent<UniversalAdditionalCameraData>();
+        data.renderPostProcessing = true;
+        data.antialiasing = AntialiasingMode.SubpixelMorphologicalAntiAliasing;
+        data.antialiasingQuality = AntialiasingQuality.High;
+        data.requiresDepthOption = CameraOverrideOption.Off;
+        data.requiresColorOption = CameraOverrideOption.Off;
+        data.renderShadows = false;
+        EditorUtility.SetDirty(data);
+
+        world.Build();
+        var scene = world.gameObject.scene;
+        EditorSceneManager.MarkSceneDirty(scene);
+        EditorSceneManager.SaveScene(scene);
+        AssetDatabase.SaveAssets();
+        Debug.Log("[S3] Graphics set up");
+    }
+
+    static Material ShaderMaterial(string path, string shaderName)
+    {
+        var shader = Shader.Find(shaderName);
+        if (shader == null) throw new System.Exception($"Shader {shaderName} not found (did it compile?)");
+        Directory.CreateDirectory(Path.GetDirectoryName(path));
+        var mat = AssetDatabase.LoadAssetAtPath<Material>(path);
+        if (mat == null)
+        {
+            mat = new Material(shader);
+            AssetDatabase.CreateAsset(mat, path);
+        }
+        mat.shader = shader;
+        EditorUtility.SetDirty(mat);
+        return mat;
+    }
+
+    /// <summary>look: 0 meadow, 1 desert, 2 aurora basin.</summary>
+    static VolumeProfile PostProfile(string path, int look)
+    {
+        bool desert = look == 1, basin = look == 2;
+        Directory.CreateDirectory(Path.GetDirectoryName(path));
+        var profile = AssetDatabase.LoadAssetAtPath<VolumeProfile>(path);
+        if (profile == null)
+        {
+            profile = ScriptableObject.CreateInstance<VolumeProfile>();
+            AssetDatabase.CreateAsset(profile, path);
+        }
+        T Get<T>() where T : VolumeComponent
+        {
+            if (!profile.TryGet(out T c))
+            {
+                c = profile.Add<T>(false);
+                c.name = typeof(T).Name;
+                AssetDatabase.AddObjectToAsset(c, profile);
+            }
+            c.active = true;
+            EditorUtility.SetDirty(c);
+            return c;
+        }
+        var bloom = Get<Bloom>();
+        bloom.threshold.Override(0.9f);
+        bloom.intensity.Override(desert ? 0.6f : 0.35f);
+        bloom.scatter.Override(0.7f);
+        bloom.tint.Override(desert ? new Color(1f, 0.82f, 0.66f) : Color.white);
+        Get<Tonemapping>().mode.Override(TonemappingMode.Neutral);
+        var grade = Get<ColorAdjustments>();
+        grade.postExposure.Override(desert ? 0.25f : 0.2f);
+        grade.contrast.Override(desert ? 14f : 12f);
+        grade.saturation.Override(desert ? 10f : 14f);
+        var wb = Get<WhiteBalance>();
+        wb.temperature.Override(desert ? 12f : 0f);
+        wb.tint.Override(desert ? 4f : 0f);
+        var vignette = Get<Vignette>();
+        vignette.intensity.Override(desert ? 0.3f : 0.22f);
+        vignette.smoothness.Override(0.45f);
+        vignette.color.Override(desert ? new Color(0.32f, 0.14f, 0.1f) : new Color(0.05f, 0.1f, 0.08f));
+        if (basin)
+        {
+            // polar day: cool, bright snow, bloom for the aurora and the lasers
+            bloom.threshold.Override(0.85f);
+            bloom.intensity.Override(0.7f);
+            bloom.tint.Override(new Color(0.85f, 0.95f, 1f));
+            grade.postExposure.Override(0.05f);
+            grade.contrast.Override(10f);
+            grade.saturation.Override(8f);
+            wb.temperature.Override(-10f);
+            wb.tint.Override(0f);
+            vignette.intensity.Override(0.24f);
+            vignette.color.Override(new Color(0.06f, 0.09f, 0.22f));
+        }
+        EditorUtility.SetDirty(profile);
+        return profile;
+    }
+
     [MenuItem("S3/Render Preview Captures")]
     public static void Capture()
     {
@@ -109,12 +246,15 @@ public static class S3Setup
             ("05_far_house", 0, 0, 225, 0),
             ("06_behind", 0, 0, 180, -4),
         };
+        var ballCamera = player.cameraFilter;
+        player.cameraFilter = null;   // walking poses
         foreach (var s in shots)
         {
             player.SetPose(s.x, s.z, s.yaw, s.pitch);
             player.ApplyCamera();
             Render(cam, $"Captures/{s.name}.png");
         }
+        player.cameraFilter = ballCamera;
         golf.DebugAim(60);
         player.ApplyCamera();
         Render(cam, "Captures/07_aim60.png");
@@ -128,6 +268,62 @@ public static class S3Setup
             Render(cam, $"Captures/{name}.png");
             Debug.Log($"[S3] {name}: {golf.DebugState}");
         }
+        // ball under a tree: the tree should dither away (compare with fading switched off)
+        Vector4 tee = world.holes[0].tee;
+        S3World.Obstacle tree = default;
+        float best = float.MaxValue;
+        foreach (var o in world.obstacles)
+            if (o.height > 5 && o.radius < 0.6f && S3.Dist(o.foot, tee) < best) { best = S3.Dist(o.foot, tee); tree = o; }
+        Vector4 toTee = S3.DirTo(tree.foot, world.holes[0].cup);
+        golf.DebugPlaceBall(S3.Walk(tree.foot, toTee == Vector4.zero ? S3.Ortho(S3.EZ, tree.foot, S3.EY) : -toTee, (tree.radius + 0.6f) / world.radius));
+        player.ApplyCamera();
+        Render(cam, "Captures/13_tree_fade.png");
+        Shader.SetGlobalFloat("_S3Fade", 0);
+        Render(cam, "Captures/13b_tree_no_fade.png");
+        Shader.SetGlobalFloat("_S3Fade", 0);
+
+        // the desert map
+        var originalBiome = world.biome;
+        world.SetBiome(S3World.Biome.Desert);
+        golf.Init();
+        player.ApplyCamera();
+        Render(cam, "Captures/20_desert_puzzle1.png");
+        player.cameraFilter = null;
+        foreach (var s in new (string name, float x, float z, float yaw, float pitch)[]
+                 {
+                     ("22_desert_fort", -1.5f, 2.5f, -38, 8),
+                     ("23_desert_fort_close", -5.5f, 5.0f, -42, 14),
+                     ("24_desert_wide", 3, -6, 20, 2),
+                     ("25_desert_up", 0, 0, 0, 55),
+                 })
+        {
+            player.SetPose(s.x, s.z, s.yaw, s.pitch);
+            player.ApplyCamera();
+            Render(cam, $"Captures/{s.name}.png");
+        }
+        player.cameraFilter = ballCamera;
+
+        // the aurora basin
+        world.SetBiome(S3World.Biome.Basin);
+        golf.Init();
+        player.ApplyCamera();
+        Render(cam, "Captures/30_basin_tee.png");
+        player.cameraFilter = null;
+        foreach (var s in new (string name, float x, float z, float yaw, float pitch)[]
+                 {
+                     ("31_basin_lake", 0, 2, 0, 2),
+                     ("32_basin_up", 0, 0, 0, 55),
+                     ("33_basin_castle", -4, 12, -40, 6),
+                 })
+        {
+            player.SetPose(s.x, s.z, s.yaw, s.pitch);
+            player.ApplyCamera();
+            Render(cam, $"Captures/{s.name}.png");
+        }
+        player.cameraFilter = ballCamera;
+        world.ClearFades();
+        world.biome = originalBiome;
+
         world.Build();   // drop the golf props again; the edit-mode preview is just the world
         player.SetPose(0, 0, 0, -5);
         Debug.Log("[S3] Captures written to " + Path.GetFullPath("Captures"));
@@ -196,17 +392,26 @@ public static class S3Setup
         for (t = 0; t < lap; t += 1 / 240f) b.Step(1 / 240f, 0, null);
         log.AppendLine($"lap: after {lap:0.00}s at 10 m/s the ball is {S3.Dist(start, b.Foot) * R:0.000} m from its start (one lap = {2 * Mathf.PI * R:0.0} m)");
 
-        // 4. launch height: vertical drives either fall back or cross the pole to the antipode
-        foreach (float speed in new[] { 0.90f, 0.92f, 0.94f, 1f })
+        // 4. game physics (ed3vv constants): soft and medium shots, then vertical drives that
+        //    either fall back or cross the pole to the antipode
+        foreach (var (pw, deg) in new[] { (0f, 2f), (0.3f, 2f), (0.5f, 24f), (1f, 24f) })
         {
-            float v0 = Mathf.Lerp(0.04f, 1f, speed) * 21.5f;
-            b = new S3Ball { R = R };
+            b = S3Golf.NewBall(R);
+            b.Place(start);
+            b.Launch(S3.EZ, S3Golf.LaunchSpeed(pw, R), deg * Mathf.Deg2Rad);
+            for (t = 0; t < 30 && !(t > 0.1f && b.grounded && b.Speed < 0.05f); t += 1 / 240f) b.Step(1 / 240f, 0.54f * R, null);
+            log.AppendLine($"shot at {pw:P0} power, {deg}°: {S3Golf.LaunchSpeed(pw, R):0.0} m/s, came to rest {S3.Dist(start, b.Foot) * R:0.00} m away after {t:0.00}s");
+        }
+        foreach (float speed in new[] { 0.90f, 0.93f, 0.95f, 1f })
+        {
+            float v0 = S3Golf.LaunchSpeed(speed, R);
+            b = S3Golf.NewBall(R);
             b.Place(start);
             b.Launch(S3.EZ, v0, 90 * Mathf.Deg2Rad);
             float top = 0;
             for (t = 0; t < 12; t += 1 / 240f)
             {
-                b.Step(1 / 240f, 1.7f, null);
+                b.Step(1 / 240f, 0.54f * R, null);
                 top = Mathf.Max(top, b.HeightM);
                 if (t > 0.2f && b.grounded) break;
             }
@@ -235,6 +440,132 @@ public static class S3Setup
                 log.AppendLine($"hole {i + 1}: tee→cup {world.GroundDistance(world.holes[i].tee, world.holes[i].cup):0.0} m");
         Debug.Log(log.ToString());
         File.WriteAllText("Captures/physics.txt", log.ToString());
+    }
+
+    // ------------------------------------------------------------------ laser puzzles
+
+    static List<S3Laser.Block> SceneryBlocks(S3World world) =>
+        world.obstacles.Select(o => S3Laser.Block.Scenery(o, world.radius)).ToList();
+
+    /// <summary>
+    /// Every Desert puzzle and Basin lock: the intended solution lights the crystal with the real
+    /// scenery in place, nothing is lit before you start, and (Basin) the solved light keeps clear of
+    /// the tee and the sealed green.
+    /// </summary>
+    [MenuItem("S3/Test Laser Puzzles")]
+    public static string TestPuzzles()
+    {
+        var world = Object.FindAnyObjectByType<S3World>();
+        var log = new StringBuilder("[S3] laser puzzles\n");
+        var original = world.biome;
+        float R = world.radius;
+        foreach (var biome in new[] { S3World.Biome.Desert, S3World.Biome.Basin })
+        {
+            world.SetBiome(biome);
+            var scenery = SceneryBlocks(world);
+            for (int i = 0; i < world.levels.Count; i++)
+            {
+                var level = world.levels[i];
+                var test = new S3Levels.Level { blocks = new List<S3Laser.Block>(level.blocks), solution = level.solution, start = level.start };
+                if (biome == S3World.Biome.Basin)
+                    test.blocks.AddRange(S3Puzzle.GateWalls(world.holes[i].cup, world.barrierRadius - 0.45f, 12, R));
+                bool works = S3Levels.SolutionWorks(test, scenery), clean = S3Levels.SolutionWorks(test, null), unsolved = S3Levels.StartsUnsolved(test, scenery);
+                log.Append($"{biome} {i + 1} {level.title}: solution {(works ? "lights the crystal" : clean ? "BLOCKED BY SCENERY" : "FAILS")}, start {(unsolved ? "unsolved" : "ALREADY SOLVED")}");
+                if (biome == S3World.Biome.Basin)
+                {
+                    var h = world.holes[i];
+                    log.Append($", hole {world.GroundDistance(h.tee, h.cup):0.0} m, {LockReport(world, level, h)}");
+                }
+                log.AppendLine();
+            }
+        }
+        world.SetBiome(original);
+        Directory.CreateDirectory("Captures");
+        File.WriteAllText("Captures/puzzles.txt", log.ToString());
+        Debug.Log(log.ToString());
+        return log.ToString();
+    }
+
+    static string LockReport(S3World world, S3Levels.Level level, S3World.Hole h)
+    {
+        float R = world.radius;
+        float light = float.MaxValue, lightTee = float.MaxValue, pieces = float.MaxValue, piecesTee = float.MaxValue;
+        foreach (var p in S3Levels.SolutionFootprint(level, R, 0.3f))
+        {
+            light = Mathf.Min(light, world.GroundDistance(p, h.cup));
+            lightTee = Mathf.Min(lightTee, world.GroundDistance(p, h.tee));
+        }
+        foreach (var b in level.blocks.Concat(level.solution))
+        {
+            pieces = Mathf.Min(pieces, world.GroundDistance(b.position, h.cup));
+            piecesTee = Mathf.Min(piecesTee, world.GroundDistance(b.position, h.tee));
+        }
+        float goal = world.GroundDistance(level.Goal.position, h.cup);
+        float walk = level.solution.Max(b => world.GroundDistance(b.position, h.tee));
+        float startTee = S3Levels.LightFootprint(level.blocks, R, 0.4f).Select(p => world.GroundDistance(p, h.tee)).DefaultIfEmpty(99).Min();
+        return $"crystal {goal:0.0} m from cup, light ≥{light:0.0} m from cup / ≥{lightTee:0.0} m from tee (unsolved ≥{startTee:0.0}), pieces ≥{pieces:0.0} / ≥{piecesTee:0.0} m, furthest piece {walk:0.0} m from tee";
+    }
+
+    /// <summary>
+    /// Searches lock placements for every Basin hole: the crystal 4.5-6.5 m from the cup, the solved
+    /// light at least 4 m from the cup and 2 m from the tee, the pieces clear of both. Prints the best
+    /// LockDef per hole (shortest walk from the tee).
+    /// </summary>
+    public static string SearchLocks()
+    {
+        var world = Object.FindAnyObjectByType<S3World>();
+        var original = world.biome;
+        world.SetBiome(S3World.Biome.Basin);
+        float R = world.radius;
+        var log = new StringBuilder();
+        for (int i = 0; i < world.holes.Count && i < world.basinLocks.Length; i++)
+        {
+            var h = world.holes[i];
+            var template = world.basinLocks[i].template;
+            var gate = S3Puzzle.GateWalls(h.cup, world.barrierRadius - 0.45f, 12, R);
+            var def = world.basinCourse[i];
+            float best = float.MaxValue;
+            S3World.LockDef bestDef = default;
+            string bestReport = "none found";
+            for (float dx = -16; dx <= 16; dx += 1f)
+                for (float dz = -16; dz <= 16; dz += 1f)
+                    for (int yaw = 0; yaw < 360; yaw += 15)
+                        foreach (bool mirror in new[] { false, true })
+                        {
+                            var d = new S3World.LockDef(template, def.cup.x + dx, def.cup.y + dz, yaw, mirror);
+                            var level = world.BuildLock(d);
+                            float goal = world.GroundDistance(level.Goal.position, h.cup);
+                            if (goal < 4.5f || goal > 6.5f) continue;
+                            bool ok = true;
+                            foreach (var b in level.blocks.Concat(level.solution))
+                                if (world.GroundDistance(b.position, h.cup) < world.barrierRadius + 1.2f ||
+                                    world.GroundDistance(b.position, h.tee) < 2.5f) { ok = false; break; }
+                            if (!ok) continue;
+                            foreach (var p in S3Levels.SolutionFootprint(level, R, 0.4f))
+                                if (world.GroundDistance(p, h.cup) < world.barrierRadius + 0.9f || world.GroundDistance(p, h.tee) < 2f) { ok = false; break; }
+                            if (!ok) continue;
+                            var test = new S3Levels.Level { blocks = new List<S3Laser.Block>(level.blocks), solution = level.solution };
+                            test.blocks.AddRange(gate);
+                            if (!S3Levels.SolutionWorks(test, null) || !S3Levels.StartsUnsolved(test, null)) continue;
+                            // the beam before anything is placed mustn't cross the tee either
+                            foreach (var p in S3Levels.LightFootprint(test.blocks, R, 0.4f))
+                                if (world.GroundDistance(p, h.tee) < 2.5f) { ok = false; break; }
+                            if (!ok) continue;
+                            float score = world.GroundDistance(level.Goal.position, h.tee) +
+                                          0.5f * level.solution.Sum(b => world.GroundDistance(b.position, h.tee)) +
+                                          0.3f * level.blocks.Sum(b => world.GroundDistance(b.position, h.tee)) / level.blocks.Count;
+                            if (score < best)
+                            {
+                                best = score;
+                                bestDef = d;
+                                bestReport = LockReport(world, level, h);
+                            }
+                        }
+            log.AppendLine($"hole {i + 1} {template}: new LockDef(S3Levels.Template.{template}, {bestDef.x}f, {bestDef.z}f, {bestDef.yaw}, {(bestDef.mirror ? "true" : "false")}), // {bestReport}");
+        }
+        world.SetBiome(original);
+        Debug.Log(log.ToString());
+        return log.ToString();
     }
 
     /// <summary>Batch entry point: unity run ... -- -executeMethod S3Setup.BatchAll</summary>
