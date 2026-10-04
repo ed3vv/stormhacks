@@ -544,7 +544,7 @@ public class S3Golf : MonoBehaviour
                 string name = strokes == 1 ? "HOLE IN ONE!" :
                     diff <= -2 ? "Eagle!" : diff == -1 ? "Birdie!" : diff == 0 ? "Par" : diff == 1 ? "Bogey" : $"+{diff}";
                 Say($"{name}\nSunk in {strokes}", 3f);
-                S3Audio.Win();
+                S3Audio.Sunk(strokes, Hole.par);
                 return;
             }
 

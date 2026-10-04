@@ -7,9 +7,10 @@ using UnityEngine;
 ///   * hit: the club strikes the ball (louder with more power)
 ///   * land: the ball hits the ground, a wall or a piece (louder the harder it hits)
 ///   * click: placing or picking up a laser piece, addressing the ball, starting the power meter
-///   * win: a hole sunk, a Desert puzzle solved, a Basin cup's ice gate opened by the laser
-///   * lose: the ball went over or past the cup and carried on
-///   * music: loops quietly, ducking under the jingles
+///   * win + the crowd: a hole sunk (cheering under par, clapping at par, slow clapping over par),
+///     a Desert puzzle solved or a Basin cup's ice gate opened by the laser (clapping)
+///   * lose + boos: the ball went over or past the cup and carried on
+///   * music: loops quietly, ducking under the jingles and the crowd
 ///
 /// The static calls do nothing outside Play mode (the capture tool drives the game in edit mode).
 /// </summary>
@@ -25,11 +26,20 @@ public class S3Audio : MonoBehaviour
     public AudioClip lose;
     public AudioClip music;
 
+    [Header("Crowd")]
+    public AudioClip cheer;       // under par
+    public AudioClip clapping;    // par, puzzles and gates
+    public AudioClip slowClap;    // over par
+    public AudioClip boo;         // a miss
+
     [Header("Volume")]
     [Range(0, 1)] public float sfxVolume = 0.8f;
     [Tooltip("Extra level for the club hit, on top of sfxVolume.")]
     [Range(0, 1)] public float hitVolume = 0.65f;
     [Range(0, 1)] public float jingleVolume = 0.9f;
+    [Tooltip("Extra level for the win jingle, on top of jingleVolume.")]
+    [Range(0, 1)] public float winVolume = 0.65f;
+    [Range(0, 1)] public float crowdVolume = 0.8f;
     [Range(0, 1)] public float musicVolume = 0.3f;
     [Tooltip("Music level while a jingle plays, as a fraction of musicVolume.")]
     [Range(0, 1)] public float musicDuck = 0.3f;
@@ -40,7 +50,7 @@ public class S3Audio : MonoBehaviour
     [Tooltip("Impacts this fast (m/s) or faster play at full volume.")]
     public float loudImpact = 10f;
 
-    AudioSource sfx, jingle, tune;
+    AudioSource sfx, jingle, crowd, tune;
     float lastLand = -1;
 
     static S3Audio Active => Instance && Application.isPlaying ? Instance : null;
@@ -50,6 +60,7 @@ public class S3Audio : MonoBehaviour
         Instance = this;
         sfx = NewSource(false);
         jingle = NewSource(false);
+        crowd = NewSource(false);
         tune = NewSource(true);
         if (music)
         {
@@ -81,7 +92,7 @@ public class S3Audio : MonoBehaviour
             tune.clip = music;
             tune.Play();
         }
-        float target = musicVolume * (jingle.isPlaying ? musicDuck : 1f);
+        float target = musicVolume * (jingle.isPlaying || crowd.isPlaying ? musicDuck : 1f);
         tune.volume = Mathf.MoveTowards(tune.volume, target, Time.unscaledDeltaTime * 1.5f);
     }
 
@@ -90,14 +101,20 @@ public class S3Audio : MonoBehaviour
         if (clip) sfx.PlayOneShot(clip, sfxVolume * volume);
     }
 
-    /// <summary>Win and lose cut each other off, so a lucky rebound into the cup only cheers.</summary>
-    void Jingle(AudioClip clip)
+    /// <summary>Win and lose (and their crowds) cut each other off, so a lucky rebound into the cup only cheers.</summary>
+    void Jingle(AudioClip clip, float volume, AudioClip crowdClip)
     {
+        Restart(jingle, clip, jingleVolume * volume);
+        Restart(crowd, crowdClip, crowdVolume);
+    }
+
+    static void Restart(AudioSource source, AudioClip clip, float volume)
+    {
+        source.Stop();
         if (!clip) return;
-        jingle.Stop();
-        jingle.clip = clip;
-        jingle.volume = jingleVolume;
-        jingle.Play();
+        source.clip = clip;
+        source.volume = volume;
+        source.Play();
     }
 
     /// <summary>The club strikes the ball; power is the meter reading (0..1).</summary>
@@ -122,16 +139,24 @@ public class S3Audio : MonoBehaviour
         if (a) a.OneShot(a.click, 0.7f);
     }
 
+    /// <summary>A Desert puzzle solved or a Basin gate opened.</summary>
     public static void Win()
     {
         var a = Active;
-        if (a) a.Jingle(a.win);
+        if (a) a.Jingle(a.win, a.winVolume, a.clapping);
+    }
+
+    /// <summary>The ball dropped: the crowd cheers under par, claps at par and slow-claps over it.</summary>
+    public static void Sunk(int strokes, int par)
+    {
+        var a = Active;
+        if (a) a.Jingle(a.win, a.winVolume, strokes < par || strokes == 1 ? a.cheer : strokes == par ? a.clapping : a.slowClap);
     }
 
     public static void Lose()
     {
         var a = Active;
-        if (a) a.Jingle(a.lose);
+        if (a) a.Jingle(a.lose, 1f, a.boo);
     }
 
 #if UNITY_EDITOR
@@ -147,6 +172,10 @@ public class S3Audio : MonoBehaviour
         if (!win) win = Load("win_jingle.wav");
         if (!lose) lose = Load("lose_jingle.wav");
         if (!music) music = Load("tune.wav");
+        if (!cheer) cheer = Load("yayyy.mp3");
+        if (!clapping) clapping = Load("clapping.mp3");
+        if (!slowClap) slowClap = Load("slow_clapping.mp3");
+        if (!boo) boo = Load("booo.mp3");
         UnityEditor.EditorUtility.SetDirty(this);
     }
 #endif
